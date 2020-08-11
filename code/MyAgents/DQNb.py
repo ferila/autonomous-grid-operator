@@ -111,7 +111,7 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         Return a valid action
         """
         # nummber of actions: number of redispatches
-        # 0: [(red_gen_id1, 0),(red_gen_id2, 0),.(red_gen_id3, 0)]
+        # 0: [(red_gen_id1, 0),(red_gen_id2, 0),(red_gen_id3, 0)]
 
         return self.action_space({"redispatch": self.redispatch_actions_dict[action]})
     

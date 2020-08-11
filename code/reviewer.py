@@ -1,13 +1,17 @@
 import os
 import copy
 import numpy as np
+from cycler import cycler
+from matplotlib import cm
 import matplotlib.pyplot as plt
 from grid2op.Episode import EpisodeData
 from grid2op.PlotGrid import PlotMatplot
 
+
 class Reviwer(object):
     def __init__(self, path_save, agent_paths, name="default"):
         self.resolution = 720
+        self.fontsize = 'x-small'
         self.name = name
         self.path_save = path_save
         self.agent_paths = agent_paths
@@ -36,10 +40,10 @@ class Reviwer(object):
         fig, axs = plt.subplots(2)
         mplays = res_case[c]['max_plays']
         axs[0].set_title("Total plays (max {})".format(mplays[0])) #this is cheat
-        axs[0].set_ylabel('Plays')
+        axs[0].set_ylabel('Plays', fontsize=self.fontsize)
         axs[1].set_title("Cumulative Rewards")
-        axs[1].set_ylabel('Reward')
-        axs[1].set_xlabel('Episode')
+        axs[1].set_ylabel('Reward', fontsize=self.fontsize)
+        axs[1].set_xlabel('Episode', fontsize=self.fontsize)
         #axs[0].set_xticks(x)
         #axs[0].set_xticklabels(labels)
         #axs[0].set_xticks(x)
@@ -50,15 +54,22 @@ class Reviwer(object):
             axs[0].bar(x+ix*width, res_case[c]['tot_plays'], width, label=self.agent_paths[ix])
             axs[1].bar(x+ix*width, res_case[c]['cum_reward'], width, label=self.agent_paths[ix])
         
-        for ix, p in enumerate(res_case[c]['tot_plays']):
-            axs[0].text(ix, p + 2)
-        
-        for ix, r in enumerate(res_case[c]['cum_reward']):
-            axs[1].text(ix, r + 2)
+            for i, p in enumerate(res_case[c]['tot_plays']):
+                axs[0].text(i+ix*width-width/2, p + 50, str(p), rotation=45, 
+                                                                fontsize='x-small',
+                                                                multialignment='left')
+
+            for i, r in enumerate(res_case[c]['cum_reward']):
+                axs[1].text(i+ix*width-width/2, r + 50, str(int(r)), rotation=45, 
+                                                                        fontsize='x-small',
+                                                                        multialignment='left')
         
         axs[0].legend()
         axs[1].legend()
         fig.tight_layout()
+        #from matplotlib.legend import Legend
+        #leg = Legend(ax, lines[2:], ['line C', 'line D'], loc='lower right', frameon=False)
+        #ax.add_artist(leg)
         fig.savefig(os.path.join(self.path_save,"{}_episodes_resume".format(self.name)), dpi=self.resolution)
 
 
@@ -72,10 +83,10 @@ class Reviwer(object):
         fig2, axs2 = plt.subplots(len(cases)) # Production by generator
         
         axs[0].set_title("Rewards per timestep")
-        axs[0].set_ylabel("Rewards")
+        axs[0].set_ylabel("Rewards", fontsize=self.fontsize)
         axs[1].set_title("Disconnected lines")
-        axs[1].set_ylabel("Number of lines")
-        axs[1].set_xlabel("Steps")
+        axs[1].set_ylabel("Number of lines", fontsize=self.fontsize)
+        axs[1].set_xlabel("Steps", fontsize=self.fontsize)
         
         for ix, c in enumerate(cases):
             this_episode = EpisodeData.from_disk(c, episode_studied)
@@ -89,20 +100,25 @@ class Reviwer(object):
             self._plot_grid(this_episode, obs[-1], path=path_save)
 
             axs2[ix].set_title("{}".format(self.agent_paths[ix]))
-            axs2[ix].set_ylabel("Generation [MW]")
-            axs2[ix].set_xlabel("Steps")            
-            #gen = self._get_all_values(obs, 'prod_p')
-            #labels = [i for i in range(gen.shape[1])]
-            #for y_arr, lab in zip(gen, labels):
-            #    print(y_arr)
-            #    # maybe it is necessarry to create a cmap
-            #    axs2[ix].plot(x, y_arr, label=lab)
-            axs2[ix].plot(x, self._get_all_values(obs, 'prod_p'))
-            axs2[ix].plot(x, self._get_all_values(obs, 'gen_pmin'))
-            axs2[ix].plot(x, self._get_all_values(obs, 'gen_pmax'))
+            axs2[ix].set_ylabel("Generation [MW]", fontsize=self.fontsize)
+            axs2[ix].set_xlabel("Steps", fontsize=self.fontsize) 
+            
+            # show only redispatchables generators
+            disp_available = obs[-1].gen_redispatchable
+            disp = np.arange(obs[-1].n_gen)[disp_available]
+            gen = self._get_all_values(obs, 'prod_p')
+            gmax = self._get_all_values(obs, 'gen_pmax')
+            colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
+            
+            axs2[ix].set_prop_cycle(cycler('color', colors))
+            axs2[ix].plot(x, gen[:,disp_available])#, color=colors[i])
+            axs2[ix].plot(x, gmax[:,disp_available])#, color=colors[i])
+            #axs2[ix].plot(x, self._get_all_values(obs, 'gen_pmin'))
         
         axs[0].legend()
         axs[1].legend()
+        axs2[0].legend(disp)
+        axs2[1].legend(disp)
         fig.tight_layout()
         fig2.tight_layout()
         fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon".format(self.name)), dpi=self.resolution)

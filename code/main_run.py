@@ -24,6 +24,9 @@ if __name__ == "__main__":
         #TODO env = grid2op.make("l2rpn_wcci_2020", reward_class=GameplayReward)
         env_name = "l2rpn_case14_sandbox" # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
         env = grid2op.make(env_name) 
+        # from grid2op.Reward import L2RPNReward, FlatReward
+        # env = grid2op.make(reward_class=L2RPNReward,
+        #                    other_rewards={"other_reward": FlatReward})
         
         # ptdf calculation
         #tp = TopologyPTDF(env=env, path=path_save)
