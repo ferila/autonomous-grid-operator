@@ -2,16 +2,20 @@ import os
 import copy
 import numpy as np
 from cycler import cycler
+import matplotlib as mpl
 from matplotlib import cm
 import matplotlib.pyplot as plt
 from grid2op.Episode import EpisodeData
 from grid2op.PlotGrid import PlotMatplot
 
+mpl.rcParams['font.size'] = 8
+mpl.rcParams['legend.fontsize'] = 'small'
+mpl.rcParams['figure.titlesize'] = 'small'
 
 class Reviwer(object):
     def __init__(self, path_save, agent_paths, name="default"):
         self.resolution = 720
-        self.fontsize = 'x-small'
+        self.fontsize = 8
         self.name = name
         self.path_save = path_save
         self.agent_paths = agent_paths
@@ -35,7 +39,6 @@ class Reviwer(object):
                 res_case[c]['cum_reward'].append(this_episode.meta['cumulative_reward'])
                 # this_episode.meta['other_rewards']
                 # this_episode.episode_times['total']
-                #         
         
         fig, axs = plt.subplots(2)
         mplays = res_case[c]['max_plays']
@@ -76,9 +79,7 @@ class Reviwer(object):
     def analise_episode(self, episode_studied, avoid_agents=[]):
         
         cases = [os.path.join(self.path_save, p) for p in self.agent_paths if p not in avoid_agents]
-            # rewards, disc_lines, 
-            # tot_gen, loads
-            # generators
+
         fig, axs = plt.subplots(2) # Rewards, line disconnections
         fig2, axs2 = plt.subplots(len(cases)) # Production by generator
         
@@ -111,8 +112,8 @@ class Reviwer(object):
             colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
             
             axs2[ix].set_prop_cycle(cycler('color', colors))
-            axs2[ix].plot(x, gen[:,disp_available])#, color=colors[i])
-            axs2[ix].plot(x, gmax[:,disp_available])#, color=colors[i])
+            axs2[ix].plot(x, gen[:,disp_available])
+            axs2[ix].plot(x, gmax[:,disp_available])
             #axs2[ix].plot(x, self._get_all_values(obs, 'gen_pmin'))
         
         axs[0].legend()
