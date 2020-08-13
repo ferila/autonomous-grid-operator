@@ -13,12 +13,14 @@ mpl.rcParams['legend.fontsize'] = 'small'
 mpl.rcParams['figure.titlesize'] = 'small'
 
 class Reviwer(object):
-    def __init__(self, path_save, agent_paths, name="default"):
+    def __init__(self, path_save, agent_paths, name="default", short_names=[]):
         self.resolution = 720
         self.fontsize = 8
+        self.alpha = 0.7
         self.name = name
         self.path_save = path_save
         self.agent_paths = agent_paths
+        self.short_names = short_names
 
     def resume_episodes(self, avoid_agents=[]):
         """
@@ -51,11 +53,11 @@ class Reviwer(object):
         #axs[0].set_xticklabels(labels)
         #axs[0].set_xticks(x)
         #axs[0].set_xticklabels(labels)
-        width = 0.35
+        width = 0.2
         for ix, c in enumerate(cases):
             x = np.arange(len(res_case[c]['ep']))
-            axs[0].bar(x+ix*width, res_case[c]['tot_plays'], width, label=self.agent_paths[ix])
-            axs[1].bar(x+ix*width, res_case[c]['cum_reward'], width, label=self.agent_paths[ix])
+            axs[0].bar(x+ix*width, res_case[c]['tot_plays'], width=width, label=self.short_names[ix], align='edge')
+            axs[1].bar(x+ix*width, res_case[c]['cum_reward'], width=width, label=self.short_names[ix], align='edge')
         
             for i, p in enumerate(res_case[c]['tot_plays']):
                 axs[0].text(i+ix*width-width/2, p + 50, str(p), rotation=45, 
@@ -67,6 +69,8 @@ class Reviwer(object):
                                                                         fontsize='x-small',
                                                                         multialignment='left')
         
+        [spine.set_visible(False) for spine in axs[0].spines.values()]
+        [spine.set_visible(False) for spine in axs[1].spines.values()]
         axs[0].legend()
         axs[1].legend()
         fig.tight_layout()
@@ -94,13 +98,14 @@ class Reviwer(object):
            
             plays = this_episode.meta['nb_timestep_played']
             x = np.arange(plays)
-            axs[0].plot(x, this_episode.rewards[0:plays], label=self.agent_paths[ix])
-            axs[1].plot(x, np.sum(this_episode.disc_lines[0:plays], axis=1), label=self.agent_paths[ix])
+            axs[0].plot(x, this_episode.rewards[0:plays], label=self.short_names[ix], alpha=self.alpha)
+            disc_lines_accumulated = np.add.accumulate(np.sum(this_episode.disc_lines[0:plays], axis=1))
+            axs[1].plot(x, disc_lines_accumulated, label=self.short_names[ix], alpha=self.alpha)
             
             obs = copy.deepcopy(this_episode.observations)
-            self._plot_grid(this_episode, obs[-1], path=path_save)
+            self._plot_grid(this_episode, obs[-1], path=os.path.join(self.path_save, "{}_lastObs_{}_{}".format(self.name, self.short_names[ix], episode_studied)))
 
-            axs2[ix].set_title("{}".format(self.agent_paths[ix]))
+            axs2[ix].set_title("{}".format(self.short_names[ix]))
             axs2[ix].set_ylabel("Generation [MW]", fontsize=self.fontsize)
             axs2[ix].set_xlabel("Steps", fontsize=self.fontsize) 
             
@@ -112,18 +117,18 @@ class Reviwer(object):
             colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
             
             axs2[ix].set_prop_cycle(cycler('color', colors))
-            axs2[ix].plot(x, gen[:,disp_available])
-            axs2[ix].plot(x, gmax[:,disp_available])
+            axs2[ix].plot(x, gen[:,disp_available], alpha=self.alpha)
+            axs2[ix].plot(x, gmax[:,disp_available], alpha=self.alpha)
             #axs2[ix].plot(x, self._get_all_values(obs, 'gen_pmin'))
         
+            axs2[ix].legend(disp)
+
         axs[0].legend()
         axs[1].legend()
-        axs2[0].legend(disp)
-        axs2[1].legend(disp)
         fig.tight_layout()
         fig2.tight_layout()
-        fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon".format(self.name)), dpi=self.resolution)
-        fig2.savefig(os.path.join(self.path_save, "{}_generation".format(self.name)), dpi=self.resolution)
+        fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon_{}".format(self.name, episode_studied)), dpi=self.resolution)
+        fig2.savefig(os.path.join(self.path_save, "{}_generation_{}".format(self.name, episode_studied)), dpi=self.resolution)
 
     def _get_all_values(self, observations, str_function):
         ans = []
@@ -143,15 +148,19 @@ class Reviwer(object):
 
 if __name__ == "__main__":
 
-    agent1 = "ddqn_tests_sandbox_vDoNothing"
-    agent2 = "ddqn_tests_sandbox_MyDDQN_10000it"
-    ag_paths = [agent1, agent2]
+    agent1 = "prstOne_sandbox_DoNothing"
+    agent2 = "prstOne_sandbox_MyDDQN_25000it"
+    agent3 = "prstOne_sandbox_MyPTDFAgent"
+    ag_paths = [agent1, agent2, agent3]
+    short_names = ["DoNothing", "D3QN (25k-it)", "ExpertSystem"]
 
     path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
-    rev = Reviwer(path_save, ag_paths, name="analysis1")
+    rev = Reviwer(path_save, ag_paths, name="prstOne_sandbox", short_names=short_names)
 
     rev.resume_episodes() # do a graph for all agents
     
     rev.analise_episode("0000")
+    rev.analise_episode("0001")
+    rev.analise_episode("0002")
 
 
