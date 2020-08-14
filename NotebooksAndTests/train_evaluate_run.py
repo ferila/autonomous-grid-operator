@@ -13,15 +13,13 @@ class DoubleDuelingDQN_Improved(DoubleDuelingDQN):
         That is why we need to change this.
         """
         # Call parent constructor
-        DoubleDuelingDQN.__init__(self,
-                                  observation_space=observation_space,
-                                  action_space=action_space,
-                                  name=name,
-                                  num_frames=num_frames,
-                                  is_training=is_training,
-                                  batch_size=batch_size,
-                                  lr=lr)
+        DoubleDuelingDQN.__init__(self, 
+                                    observation_space=observation_space,
+                                    action_space=action_space,
+                                    name=name,
+                                    is_training=is_training)
         
+        self.batch_size = batch_size
         # import some constant and the class for this baseline
         from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN_NN import DoubleDuelingDQN_NN
         from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN import LR_DECAY_STEPS, LR_DECAY_RATE
@@ -51,6 +49,7 @@ class DoubleDuelingDQN_Improved(DoubleDuelingDQN):
 
 class Runna(object):
 
+    @staticmethod
     def train(env_name, train_iter):
         # create an environment
         env = grid2op.make(env_name)  
@@ -76,6 +75,7 @@ class Runna(object):
         #                         load_path=None, # put something else if you want to reload an agent instead of creating a new one
         #                         logs_path="tf_logs_DDDQN")
 
+    @staticmethod
     def evaluate(env_name, agent, max_iter):
         ###################
         ### Evaluate Agent
@@ -98,6 +98,7 @@ class Runna(object):
 
         return runner
 
+    @staticmethod
     def run(runner):
         ####################
         ##### Run Agent
