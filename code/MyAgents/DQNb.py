@@ -87,7 +87,7 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         res = []
         
         # include generation observations
-        gen = observation.prod_p / observation.gen_pmax
+        gen = observation.prod_p / (observation.gen_pmax * 1.1) #1.1 because prod_p seems to go beyond the maximum
         res.append(gen)
 
         # include powerflow observations

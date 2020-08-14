@@ -1,5 +1,6 @@
 import os
 import copy
+import imageio
 import numpy as np
 from cycler import cycler
 import matplotlib as mpl
@@ -53,20 +54,20 @@ class Reviwer(object):
         #axs[0].set_xticklabels(labels)
         #axs[0].set_xticks(x)
         #axs[0].set_xticklabels(labels)
-        width = 0.2
+        width = 0.25
         for ix, c in enumerate(cases):
             x = np.arange(len(res_case[c]['ep']))
             axs[0].bar(x+ix*width, res_case[c]['tot_plays'], width=width, label=self.short_names[ix], align='edge')
             axs[1].bar(x+ix*width, res_case[c]['cum_reward'], width=width, label=self.short_names[ix], align='edge')
         
             for i, p in enumerate(res_case[c]['tot_plays']):
-                axs[0].text(i+ix*width-width/2, p + 50, str(p), rotation=45, 
-                                                                fontsize='x-small',
+                axs[0].text(i+ix*width, p + 50, str(p), rotation=90, 
+                                                                fontsize='xx-small',
                                                                 multialignment='left')
 
             for i, r in enumerate(res_case[c]['cum_reward']):
-                axs[1].text(i+ix*width-width/2, r + 50, str(int(r)), rotation=45, 
-                                                                        fontsize='x-small',
+                axs[1].text(i+ix*width, r + 50, str(int(r)), rotation=90, 
+                                                                        fontsize='xx-small',
                                                                         multialignment='left')
         
         [spine.set_visible(False) for spine in axs[0].spines.values()]
@@ -102,13 +103,14 @@ class Reviwer(object):
             disc_lines_accumulated = np.add.accumulate(np.sum(this_episode.disc_lines[0:plays], axis=1))
             axs[1].plot(x, disc_lines_accumulated, label=self.short_names[ix], alpha=self.alpha)
             
-            obs = copy.deepcopy(this_episode.observations)
-            self._plot_grid(this_episode, obs[-1], path=os.path.join(self.path_save, "{}_lastObs_{}_{}".format(self.name, self.short_names[ix], episode_studied)))
+            self._save_grid_images(this_episode, agent_ix=ix, episode_number=episode_studied, last_frames=5)
+            self._save_heatmap_images(this_episode, agent_ix=ix, episode_number=episode_studied, last_frames=5)
 
             axs2[ix].set_title("{}".format(self.short_names[ix]))
             axs2[ix].set_ylabel("Generation [MW]", fontsize=self.fontsize)
             axs2[ix].set_xlabel("Steps", fontsize=self.fontsize) 
             
+            obs = copy.deepcopy(this_episode.observations)
             # show only redispatchables generators
             disp_available = obs[-1].gen_redispatchable
             disp = np.arange(obs[-1].n_gen)[disp_available]
@@ -136,6 +138,56 @@ class Reviwer(object):
             ans.append(getattr(observations[i], str_function))
         return np.array(ans)
 
+    def _save_heatmap_images(self, this_episode, agent_ix=None, episode_number=None, last_frames=5):
+        """For now, only saves an image table of last (frames) values"""
+        obs = copy.deepcopy(this_episode.observations)
+        rows = obs[-1].n_gen + obs[-1].n_line + obs[-1].n_load
+        matrix = np.zeros((rows, last_frames))
+        col_names = []
+        row_names = []
+        for fr in range(last_frames):
+            ls = []
+            ix = -last_frames + fr
+            ls.append(np.round(obs[ix].prod_p))
+            row_names.append(obs[ix].name_gen)
+
+            ls.append(np.round(obs[ix].load_p))
+            row_names.append(obs[ix].name_load)
+
+            ls.append(np.round(obs[ix].rho, 2))
+            row_names.append(obs[ix].name_line)
+
+            matrix[:,fr] = np.concatenate(ls)
+            col_names.append("Frame {}".format(ix))
+
+        row_names = np.concatenate(row_names)
+
+        fig, ax = plt.subplots()
+        ax.table(cellText = matrix, colLabels = col_names, rowLabels = row_names, loc='center')
+
+        ax.axis('off')
+        ax.grid('off')
+        image_folder = os.path.join(self.path_save, "{}_{}_{}_images".format(self.name, self.short_names[agent_ix], episode_number))
+        if not os.path.exists(image_folder):
+            os.mkdir(image_folder)
+        fig.savefig(os.path.join(image_folder, "last_values"), bbox_inches="tight" )
+
+    def _save_grid_images(self, this_episode, agent_ix=None, episode_number=None, last_frames=5):
+        """Saves grid with values from the specified last last_frames"""
+        images = []
+        image_folder = os.path.join(self.path_save, "{}_{}_{}_images".format(self.name, self.short_names[agent_ix], episode_number))
+        if not os.path.exists(image_folder):
+            os.mkdir(image_folder)
+        obs = copy.deepcopy(this_episode.observations)
+        for fr in range(last_frames):
+            file_name = "grid_frame{}".format(fr)
+            path_name = os.path.join(image_folder, file_name)
+            self._plot_grid(this_episode, obs[-last_frames + fr], path=path_name)
+            images.append(imageio.imread(path_name))
+        
+        kwargs = {'duration': 0.8}
+        imageio.mimsave(os.path.join(image_folder, "animated_grid"), images, format='GIF', **kwargs)
+
     def _plot_grid(self, this_episode, obs, show=False, path=None):
         plot_helper = PlotMatplot(observation_space=this_episode.observation_space, width=1920, height=1080)
         plot_helper._line_bus_radius = 7
@@ -148,19 +200,19 @@ class Reviwer(object):
 
 if __name__ == "__main__":
 
-    agent1 = "prstOne_sandbox_DoNothing"
-    agent2 = "prstOne_sandbox_MyDDQN_25000it"
-    agent3 = "prstOne_sandbox_MyPTDFAgent"
+    agent1 = "prstOne_redisp_DoNothing"
+    agent2 = "prstOne_redisp_MyDDQN_25000it"
+    agent3 = "prstOne_redisp_MyPTDFAgent"
     ag_paths = [agent1, agent2, agent3]
     short_names = ["DoNothing", "D3QN (25k-it)", "ExpertSystem"]
 
     path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
-    rev = Reviwer(path_save, ag_paths, name="prstOne_sandbox", short_names=short_names)
+    rev = Reviwer(path_save, ag_paths, name="prstOne_redisp", short_names=short_names)
 
     rev.resume_episodes() # do a graph for all agents
     
-    rev.analise_episode("0000")
-    rev.analise_episode("0001")
-    rev.analise_episode("0002")
+    #rev.analise_episode("0000")
+    #rev.analise_episode("0001")
+    #rev.analise_episode("0002")
 
 
