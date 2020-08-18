@@ -23,7 +23,8 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
 
         self.ACTIONS_PER_GEN = 3
         self.redispatch_actions_dict = self._build_redispatch_dict()
-        # observation size = powerflows + generators + (minute, hour, day and month)
+        # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
+        # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
         self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
@@ -89,18 +90,29 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
 
         
     def convert_obs(self, observation):
+        # v1: rho + prod_p + minutes + hour + day
+        # v2: rho + load_p + prod_p + minutes + hour + day
         res = []
+
+        if True:
+            # include powerflow observations
+            powerflow_limit = 1.7 # 200% of powerflow disconnects automatically the powerline
+            max_val = powerflow_limit
+            min_val = -powerflow_limit
+            # new_val_x = min_new + (max_new - min_new) * (val_x - min_x) / (max_x - min_x)
+            pflow = -1 + 2 * (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
+            res.append(pflow)
+        
+        if False:
+            # include load_p observations
+            max_sorted = np.sort(observation.gen_pmax)
+            max_load = max_sorted[-1] + max_sorted[-2] # normalise by the two biggest generators
+            load_norm = observation.load_p / max_load
+            res.append(load_norm)
         
         # include generation observations
         gen = observation.prod_p / (observation.gen_pmax * 1.1) #1.1 because prod_p seems to go beyond the maximum
         res.append(gen)
-
-        # include powerflow observations
-        powerflow_limit = 2 # 200% of powerflow disconnects automatically the powerline
-        max_val = powerflow_limit
-        min_val = -powerflow_limit
-        pflow = (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val)
-        res.append(pflow)
 
         # include time (year not included, should work only on long term)
         res.append(np.array([observation.minute_of_hour / 60]))
@@ -125,14 +137,14 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         event_acc = EventAccumulator(file_path)
         event_acc.Reload()
         cols = ['wtime', 'step', 'reward', 'alive', 'reward100', 'alive100', 'loss', 'lr']
-        res = pd.DataFrame()
+        res = pd.DataFrame([])
         for metric in ['mean_reward', 'mean_alive', 'mean_reward_100', 'mean_alive_100', 'loss', 'lr']:
             if res.empty:
                 res = pd.DataFrame([(w, s, tf.make_ndarray(t)) for w, s, t in event_acc.Tensors(metric)])
             else:
                 res  = pd.concat([res, pd.DataFrame([(tf.make_ndarray(t)) for w, s, t in event_acc.Tensors(metric)])], axis=1)
         res.columns = cols
-        res.to_csv(os.path.join(log_path, 'summary'))
+        res.to_csv(os.path.join(log_path, 'summary.csv'))
     
     def _find_file_in(self, path):
         files = os.listdir(path)

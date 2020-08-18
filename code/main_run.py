@@ -9,16 +9,18 @@ from MyAgents.DQNb import MyDoubleDuelingDQN
 from MyAgents.FirstAgents import MyFirstPTDFAgent
 from l2rpn_baselines.DoubleDuelingDQN import train as DDDQN_train
 
+# tOne: with load
+# tOne: with different range
 
 if __name__ == "__main__":
-    for env_case_name in ["l2rpn_case14_sandbox", "rte_case14_redisp"]:
-        for case_name in ["DoNothing","MyDDQN","MyPTDFAgent"]: #"DoNothing" "MyPTDFAgent" "MyDDQN"
+    for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp"
+        for case_name in ["MyDDQN"]: #"DoNothing" "MyPTDFAgent" "MyDDQN"
             start_time = time.time()
             print("-------------{}--------------".format(case_name))
             print("start time: {}".format(start_time))
 
             aa = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
-            case = "prstOne_{}_{}".format(aa[env_case_name], case_name)
+            case = "tTwo_{}_{}".format(aa[env_case_name], case_name)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
                 os.mkdir(path_save)
