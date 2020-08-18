@@ -1,8 +1,13 @@
 #from DQN_NNb import DQN_NNb
+import os
 import numpy as np
+import pandas as pd
 from l2rpn_baselines.DoubleDuelingDQN import DoubleDuelingDQN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN_NN import DoubleDuelingDQN_NN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQNConfig import DoubleDuelingDQNConfig as cfg
+
+import tensorflow as tf
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 class MyDoubleDuelingDQN(DoubleDuelingDQN):
 
@@ -115,3 +120,21 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
 
         return self.action_space({"redispatch": self.redispatch_actions_dict[action]})
     
+    def export_summary(self, log_path):
+        file_path = self._find_file_in(log_path)
+        event_acc = EventAccumulator(file_path)
+        event_acc.Reload()
+        cols = ['wtime', 'step', 'reward', 'alive', 'reward100', 'alive100', 'loss', 'lr']
+        res = pd.DataFrame()
+        for metric in ['mean_reward', 'mean_alive', 'mean_reward_100', 'mean_alive_100', 'loss', 'lr']:
+            if res.empty:
+                res = pd.DataFrame([(w, s, tf.make_ndarray(t)) for w, s, t in event_acc.Tensors(metric)])
+            else:
+                res  = pd.concat([res, pd.DataFrame([(tf.make_ndarray(t)) for w, s, t in event_acc.Tensors(metric)])], axis=1)
+        res.columns = cols
+        res.to_csv(os.path.join(log_path, 'summary'))
+    
+    def _find_file_in(self, path):
+        files = os.listdir(path)
+        fname = files[0] # there is only one file
+        return os.path.join(path, fname)

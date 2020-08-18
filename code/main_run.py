@@ -51,6 +51,7 @@ if __name__ == "__main__":
                     #DEFAULT VALUES: num_frames=4, batch_size=32, lr=1e-5
                     agent = MyDoubleDuelingDQN(env.observation_space, env.action_space, name=agent_name, is_training=True)
                     agent.train(env, train_iter, path_save, logdir=log_path)
+                    agent.export_summary(log_path=os.path.join(log_path, agent_name))
                 else:
                     agent = MyDoubleDuelingDQN(env.observation_space, env.action_space)
                     agent.load(agent_nn_path)
