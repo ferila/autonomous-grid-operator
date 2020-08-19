@@ -25,7 +25,8 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         self.redispatch_actions_dict = self._build_redispatch_dict()
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
-        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + 3
+        # v2: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
+        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + sum(self.obs_space.gen_redispatchable) + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
 
@@ -96,11 +97,12 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
 
         if True:
             # include powerflow observations
-            powerflow_limit = 1.7 # 200% of powerflow disconnects automatically the powerline
+            powerflow_limit = 1.6 # 200% of powerflow disconnects automatically the powerline
             max_val = powerflow_limit
             min_val = -powerflow_limit
             # new_val_x = min_new + (max_new - min_new) * (val_x - min_x) / (max_x - min_x)
-            pflow = -1 + 2 * (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
+            #pflow = -1 + 2 * (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
+            pflow = (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
             res.append(pflow)
         
         if False:
@@ -110,9 +112,17 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
             load_norm = observation.load_p / max_load
             res.append(load_norm)
         
-        # include generation observations
-        gen = observation.prod_p / (observation.gen_pmax * 1.1) #1.1 because prod_p seems to go beyond the maximum
-        res.append(gen)
+        if True:
+            # include generation observations
+            gen = observation.prod_p / (observation.gen_pmax * 1.1) #1.1 because prod_p seems to go beyond the maximum
+            res.append(gen)
+        
+        if True:
+            # include actual dispatch
+            max_disp = observation.gen_pmax
+            min_disp = -observation.gen_pmax
+            actual_d = (observation.actual_dispatch - min_disp) / (max_disp - min_disp)
+            res.append(actual_d[observation.gen_redispatchable])
 
         # include time (year not included, should work only on long term)
         res.append(np.array([observation.minute_of_hour / 60]))

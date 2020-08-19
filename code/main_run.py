@@ -9,18 +9,20 @@ from MyAgents.DQNb import MyDoubleDuelingDQN
 from MyAgents.FirstAgents import MyFirstPTDFAgent
 from l2rpn_baselines.DoubleDuelingDQN import train as DDDQN_train
 
+# tZero: normal (powerflow (0,1) without load)
 # tOne: with load
-# tOne: with different range
+# tTwo: powerflow from (0,1) to (-1,1)
+# tThree: generation plus actual dispatch
 
 if __name__ == "__main__":
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp"
-        for case_name in ["MyDDQN"]: #"DoNothing" "MyPTDFAgent" "MyDDQN"
+        for case_name in ["D3QN"]: #"DoNothing" "MyPTDFAgent" "D3QN"
             start_time = time.time()
             print("-------------{}--------------".format(case_name))
             print("start time: {}".format(start_time))
 
             aa = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
-            case = "tTwo_{}_{}".format(aa[env_case_name], case_name)
+            case = "tThree_{}_{}".format(aa[env_case_name], case_name)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
                 os.mkdir(path_save)
@@ -42,7 +44,7 @@ if __name__ == "__main__":
             elif case_name == "MyDDQN_H":
                 # TODO
                 tp = TopologyPTDF(env=env, path=path_save)
-            elif case_name == "MyDDQN":
+            elif case_name == "D3QN":
                 agent_name = "{}_ddqn".format(case_name)
                 agent_nn_path = os.path.join(path_save, "{}.h5".format(agent_name))
                 if not os.path.exists(agent_nn_path):

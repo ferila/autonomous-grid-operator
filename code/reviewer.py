@@ -79,6 +79,7 @@ class Reviewer(object):
         #leg = Legend(ax, lines[2:], ['line C', 'line D'], loc='lower right', frameon=False)
         #ax.add_artist(leg)
         fig.savefig(os.path.join(self.path_save,"{}_episodes_resume".format(self.name)), dpi=self.resolution)
+        fig.close()
 
     def analise_episode(self, episode_studied, last_frames=5, avoid_agents=[]):
         
@@ -86,42 +87,55 @@ class Reviewer(object):
 
         fig, axs = plt.subplots(2) # Rewards, line disconnections
         fig2, axs2 = plt.subplots(len(cases), squeeze=False) # Production by generator and total load
-        fig3, axs3 = plt.subplots(len(cases), squeeze=False) # Actual dispatch with redispatch actions
-        
-        axs[0].set_title("Rewards per timestep")
-        axs[0].set_ylabel("Rewards", fontsize=self.fontsize)
-        axs[1].set_title("Disconnected lines")
-        axs[1].set_ylabel("Number of lines", fontsize=self.fontsize)
-        axs[1].set_xlabel("Steps", fontsize=self.fontsize)
-
-        
+                
         for ix, c in enumerate(cases):
             this_episode = EpisodeData.from_disk(c, episode_studied)
+            image_folder = os.path.join(self.path_save, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
+            if not os.path.exists(image_folder):
+                os.mkdir(image_folder)
 
-            self._save_grid_images(this_episode, agent_ix=ix, episode_number=episode_studied, last_frames=last_frames)
-            self._save_heatmap_images(this_episode, agent_ix=ix, episode_number=episode_studied, last_frames=last_frames)
-
+            # Common graphs
+            ## Rewards and disconnected lines
             self._add_plot_rewards_and_disconnected_lines(this_episode, axs, case_ix=ix)
-
+            ## Generation of dispatchable generators and net load
             self._add_plot_generations_and_load(this_episode, axs2, subplot_ix=ix)
-            self._add_plot_dispatch_and_redispatch(this_episode, axs3, subplot_ix=ix)
 
-        axs[0].legend()
-        axs[1].legend()
+            # Case specific graphs
+            ## Last frames grid images and animated gif
+            self._save_grid_images(this_episode, last_frames=last_frames, folder=image_folder)
+            ## Last grames values TODO: colour heatmap
+            self._save_heatmap_images(this_episode, last_frames=last_frames, folder=image_folder)
+            ## Actual dispatch, target dispatch, redispatch actions
+            self._add_plot_dispatch_and_redispatch(this_episode, case_ix=ix, folder=image_folder)
+            ## Total demand and generation, generation by unit
+            self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
+
+        # Save common graphs
         fig.tight_layout()
         fig2.tight_layout()
-        fig3.tight_layout()
         fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon_{}".format(self.name, episode_studied)), dpi=self.resolution)
         fig2.savefig(os.path.join(self.path_save, "{}_generation_{}".format(self.name, episode_studied)), dpi=self.resolution)
-        fig3.savefig(os.path.join(self.path_save, "{}_dispatches_{}".format(self.name, episode_studied)), dpi=self.resolution)
+        plt.close(fig)
+        plt.close(fig2)
 
     
     def _add_plot_rewards_and_disconnected_lines(self, this_episode, ax, case_ix=None):
+        ax[0].set_title("Rewards per timestep")
+        ax[0].set_ylabel("Rewards", fontsize=self.fontsize)
+        
+        ax[1].set_title("Disconnected lines")
+        ax[1].set_ylabel("Number of lines", fontsize=self.fontsize)
+        ax[1].set_xlabel("Steps", fontsize=self.fontsize)
+
         plays = this_episode.meta['nb_timestep_played']
         x = np.arange(plays)
-        ax[0].plot(x, this_episode.rewards[0:plays], label=self.short_names[case_ix], alpha=self.alpha)
         disc_lines_accumulated = np.add.accumulate(np.sum(this_episode.disc_lines[0:plays], axis=1))
+        
+        ax[0].plot(x, this_episode.rewards[0:plays], label=self.short_names[case_ix], alpha=self.alpha)
         ax[1].plot(x, disc_lines_accumulated, label=self.short_names[case_ix], alpha=self.alpha)
+
+        ax[0].legend()
+        ax[1].legend()
         
     def _add_plot_generations_and_load(self, this_episode, ax, subplot_ix=None):
         ax[subplot_ix,0].set_title("{}".format(self.short_names[subplot_ix]))
@@ -147,14 +161,27 @@ class Reviewer(object):
     
         ax[subplot_ix,0].legend(disp)
 
-    def _add_plot_dispatch_and_redispatch(self, this_episode, ax, subplot_ix=None):
-        ax[subplot_ix,0].set_title("{}".format(self.short_names[subplot_ix]))
-        ax[subplot_ix,0].set_ylabel("Dispatch [MW]", fontsize=self.fontsize)
-        ax[subplot_ix,0].set_xlabel("Steps", fontsize=self.fontsize) 
+    
+    def _add_plot_dispatch_and_redispatch(self, this_episode, case_ix=None, folder=None):
+        """
+        # Actual dispatch, target dispatch, redispatch actions
+        """
+        fig, ax = plt.subplots(3)
+
+        ax[0].set_title("Actual dispatch - {}".format(self.short_names[case_ix]))
+        ax[0].set_ylabel("Power [MW]", fontsize=self.fontsize)
+        
+        ax[1].set_title("Target dispatch - {}".format(self.short_names[case_ix]))
+        ax[1].set_ylabel("Power [MW]", fontsize=self.fontsize)
+        
+        ax[2].set_title("Redispatch action - {}".format(self.short_names[case_ix]))
+        ax[2].set_ylabel("Power [MW]", fontsize=self.fontsize)
+        ax[2].set_xlabel("Steps", fontsize=self.fontsize) 
 
         obs = copy.deepcopy(this_episode.observations)
         acts = copy.deepcopy(this_episode.actions)
         actual_d = self._get_all_values(obs, 'actual_dispatch')
+        target_d = self._get_all_values(obs, 'target_dispatch')
         redisp_act = self._get_all_action_values(acts, 'redispatch')
 
         plays = this_episode.meta['nb_timestep_played']
@@ -163,29 +190,62 @@ class Reviewer(object):
         # show only redispatchables generators
         disp_available = obs[-1].gen_redispatchable
         disp = np.arange(obs[-1].n_gen)[disp_available]
+        
         colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
-        ax[subplot_ix,0].set_prop_cycle(cycler('color', colors))
-        ax[subplot_ix,0].plot(x, actual_d[:,disp_available], alpha=self.alpha)
-        ax[subplot_ix,0].plot(x, redisp_act[:,disp_available], alpha=self.alpha)
+        ax[0].set_prop_cycle(cycler('color', colors))
+        ax[1].set_prop_cycle(cycler('color', colors))
+        ax[2].set_prop_cycle(cycler('color', colors))
 
-        ax[subplot_ix,0].legend(disp)
+        ax[0].plot(x, actual_d[:,disp_available], alpha=self.alpha)
+        ax[1].plot(x, target_d[:,disp_available], alpha=self.alpha)
+        ax[2].plot(x, redisp_act[:,disp_available], alpha=self.alpha)
 
-    
-    def _get_all_values(self, observations, str_function):
-        ans = []
-        for i in range(1,len(observations)):
-            ans.append(getattr(observations[i], str_function))
-        return np.array(ans)
-    
-    def _get_all_action_values(self, actions, action_key):
-        ans = []
-        for i in range(len(actions)):
-            act = actions[i].as_dict()[action_key]
-            ans.append(act)
-        return np.array(ans)
+        ax[0].legend(disp)
+        ax[1].legend(disp)
+        ax[2].legend(disp)
 
-    def _save_heatmap_images(self, this_episode, agent_ix=None, episode_number=None, last_frames=5):
-        """For now, only saves an image table of last (frames) values"""
+        fig.tight_layout()
+        fig.savefig(os.path.join(folder, "dispatches"), dpi=self.resolution)
+        plt.close(fig)
+
+    def _add_plot_all_generation_by_case(self, this_episode, case_ix=None, folder=None):
+        """
+        # Total demand and generation, generation by unit
+        """
+        obs = copy.deepcopy(this_episode.observations)
+        n_gen = obs[-1].n_gen
+        n_steps = this_episode.meta['nb_timestep_played']
+        x = np.arange(n_steps)
+        fig, axs = plt.subplots(n_gen + 1, gridspec_kw = {'wspace':0, 'hspace':0})
+
+        load = self._get_all_values(obs, 'load_p')
+        gen = self._get_all_values(obs, 'prod_p')
+        pmax = self._get_all_values(obs, 'gen_pmax')
+
+        net_load = np.sum(load, axis=1)
+        net_gen = np.sum(gen, axis=1)
+        axs[0].plot(x, net_load, label='Net load')
+        axs[0].plot(x, net_gen, label='Net gen.')
+        axs[0].set_xticklabels([])
+        axs[0].legend()
+        
+        colors = [cm.rainbow(x) for x in np.linspace(0, 1, n_gen)]
+        for g_ix in range(n_gen):
+            axs[g_ix+1].plot(x, gen[:,g_ix], alpha=self.alpha, c=colors[g_ix], label=g_ix)
+            axs[g_ix+1].plot(x, pmax[:,g_ix], alpha=self.alpha, c=colors[g_ix])
+            axs[g_ix+1].legend()
+            if g_ix < n_gen-1:
+                axs[g_ix+1].set_xticklabels([])
+
+        #fig.text(-0.5, 0.5, 'Power [MW]', va='center', rotation='vertical')
+        fig.tight_layout()
+        fig.savefig(os.path.join(folder, "all_generation"), dpi=self.resolution)
+        plt.close(fig)
+
+    def _save_heatmap_images(self, this_episode, last_frames=5, folder=None):
+        """
+        For now, only saves an image table of last (frames) values
+        """
         obs = copy.deepcopy(this_episode.observations)
         rows = obs[-1].n_gen + obs[-1].n_line + obs[-1].n_load
         matrix = np.zeros((rows, last_frames))
@@ -211,27 +271,39 @@ class Reviewer(object):
         ax.table(cellText = np.round(matrix,2), colLabels = col_names, rowLabels = row_names, loc='center')
 
         ax.axis('off')
-        ax.grid('off')
-        image_folder = os.path.join(self.path_save, "{}_{}_images".format(self.agent_paths[agent_ix], episode_number))
-        if not os.path.exists(image_folder):
-            os.mkdir(image_folder)
-        fig.savefig(os.path.join(image_folder, "last_values"), bbox_inches="tight", dpi=self.resolution)
+        ax.grid('off')       
+        fig.savefig(os.path.join(folder, "last_values"), bbox_inches="tight", dpi=self.resolution)
+        plt.close(fig)
 
-    def _save_grid_images(self, this_episode, agent_ix=None, episode_number=None, last_frames=5):
-        """Saves grid with values from the specified last last_frames"""
+    def _save_grid_images(self, this_episode, last_frames=5, folder=None):
+        """
+        Saves grid with values from the specified last last_frames
+        """
+
         images = []
-        image_folder = os.path.join(self.path_save, "{}_{}_images".format(self.agent_paths[agent_ix], episode_number))
-        if not os.path.exists(image_folder):
-            os.mkdir(image_folder)
         obs = copy.deepcopy(this_episode.observations)
         for fr in range(last_frames):
             file_name = "grid_frame{}".format(fr)
-            path_name = os.path.join(image_folder, file_name)
+            path_name = os.path.join(folder, file_name)
             self._plot_grid(this_episode, obs[-last_frames + fr], path=path_name)
             images.append(imageio.imread("{}.png".format(path_name)))
         
         kwargs = {'duration': 0.8}
-        imageio.mimsave(os.path.join(image_folder, "animated_grid.gif"), images, format='GIF', **kwargs)
+        imageio.mimsave(os.path.join(folder, "animated_grid.gif"), images, format='GIF', **kwargs)
+    
+    
+    def _get_all_values(self, observations, str_function):
+        ans = []
+        for i in range(1,len(observations)):
+            ans.append(getattr(observations[i], str_function))
+        return np.array(ans)
+    
+    def _get_all_action_values(self, actions, action_key):
+        ans = []
+        for i in range(len(actions)):
+            act = actions[i].as_dict()[action_key]
+            ans.append(act)
+        return np.array(ans)
 
     def _plot_grid(self, this_episode, obs, show=False, path=None):
         plot_helper = PlotMatplot(observation_space=this_episode.observation_space, width=1920, height=1080)
@@ -245,14 +317,17 @@ class Reviewer(object):
 
 if __name__ == "__main__":
 
-    agent1 = "prstOne_redisp_DoNothing"
-    agent2 = "tOne_sandbox_MyDDQN_25000it"
-    agent3 = "prstOne_redisp_MyPTDFAgent"
-    ag_paths = [agent2] # agent1, agent3
-    short_names = ["D3QN (25k-it)"] # "DoNothing", "ExpertSystem"
+    test_case = 'tTwo_sandbox'
+
+    agent1 = "{}_DoNothing".format(test_case)
+    agent2 = "{}_D3QN".format(test_case)
+    agent3 = "{}_MyPTDFAgent".format(test_case)
+    #ag_paths = [agent2] # agent1, agent3
+    ag_paths = ["tZero_sandbox_D3QN", "tThree_sandbox_D3QN"]
+    short_names = ["D3QN (zero)", "D3QN (three)"] # "DoNothing", "ExpertSystem"
 
     path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
-    rev = Reviewer(path_save, ag_paths, name="tOne_sandbox", short_names=short_names)
+    rev = Reviewer(path_save, ag_paths, name='bestDqns', short_names=short_names)
 
     rev.resume_episodes() # do a graph for all agents
     
