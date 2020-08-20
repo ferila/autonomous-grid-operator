@@ -79,13 +79,13 @@ class Reviewer(object):
         #leg = Legend(ax, lines[2:], ['line C', 'line D'], loc='lower right', frameon=False)
         #ax.add_artist(leg)
         fig.savefig(os.path.join(self.path_save,"{}_episodes_resume".format(self.name)), dpi=self.resolution)
-        fig.close()
+        plt.close(fig)
 
     def analise_episode(self, episode_studied, last_frames=5, avoid_agents=[]):
         
         cases = [os.path.join(self.path_save, p) for p in self.agent_paths if p not in avoid_agents]
 
-        fig, axs = plt.subplots(2) # Rewards, line disconnections
+        fig, axs = plt.subplots(3) # Rewards, line disconnections, overflow_timesteps
         fig2, axs2 = plt.subplots(len(cases), squeeze=False) # Production by generator and total load
                 
         for ix, c in enumerate(cases):
@@ -109,11 +109,13 @@ class Reviewer(object):
             self._add_plot_dispatch_and_redispatch(this_episode, case_ix=ix, folder=image_folder)
             ## Total demand and generation, generation by unit
             self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
+            ## Zone balance
+            self._add_specific_topology_plot(this_episode, case_ix=ix, folder=image_folder)
 
         # Save common graphs
         fig.tight_layout()
         fig2.tight_layout()
-        fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon_{}".format(self.name, episode_studied)), dpi=self.resolution)
+        fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon_overf_{}".format(self.name, episode_studied)), dpi=self.resolution)
         fig2.savefig(os.path.join(self.path_save, "{}_generation_{}".format(self.name, episode_studied)), dpi=self.resolution)
         plt.close(fig)
         plt.close(fig2)
@@ -125,17 +127,24 @@ class Reviewer(object):
         
         ax[1].set_title("Disconnected lines")
         ax[1].set_ylabel("Number of lines", fontsize=self.fontsize)
-        ax[1].set_xlabel("Steps", fontsize=self.fontsize)
+
+        ax[2].set_title('Overflow timesteps')
+        ax[2].set_ylabel('Timesteps', fontsize=self.fontsize)
+        ax[2].set_xlabel('Steps', fontsize=self.fontsize)
 
         plays = this_episode.meta['nb_timestep_played']
         x = np.arange(plays)
         disc_lines_accumulated = np.add.accumulate(np.sum(this_episode.disc_lines[0:plays], axis=1))
+        obs = copy.deepcopy(this_episode.observations)
+        overflow_times = np.sum(self._get_all_values(obs, 'timestep_overflow'), axis=1)
         
         ax[0].plot(x, this_episode.rewards[0:plays], label=self.short_names[case_ix], alpha=self.alpha)
         ax[1].plot(x, disc_lines_accumulated, label=self.short_names[case_ix], alpha=self.alpha)
+        ax[2].plot(x, overflow_times, label=self.short_names[case_ix], alpha=self.alpha)
 
         ax[0].legend()
         ax[1].legend()
+        ax[2].legend()
         
     def _add_plot_generations_and_load(self, this_episode, ax, subplot_ix=None):
         ax[subplot_ix,0].set_title("{}".format(self.short_names[subplot_ix]))
@@ -162,6 +171,62 @@ class Reviewer(object):
         ax[subplot_ix,0].legend(disp)
 
     
+    def _add_specific_topology_plot(self, this_episode, case_ix=None, folder=None):
+        """
+        Plot 1:
+            - Net generation/consumption zone 1
+            - Net generation/consumption zone 2
+        Plot 2:
+            - Powerflow line 17 (4-5)
+            - Powerflow line 16 (3-8) + 19 (6-8)
+            - Powerflow (cut) line 17 + 16 + 19
+        """
+
+        fig, ax = plt.subplots(3)
+        x = np.arange(this_episode.meta['nb_timestep_played'])
+
+        ax[0].set_title('Net power per zone - {}'.format(self.short_names[case_ix]))
+        ax[0].set_ylabel('Power [MW]')
+        ax[0].set_xlabel('Timesteps')
+
+        ax[1].set_title('Net power difference - {}'.format(self.short_names[case_ix]))
+        ax[1].set_ylabel('Power [MW]')
+        ax[1].set_xlabel('Timesteps')
+
+        ax[2].set_title('Powerflow by lines and cut between zones - {}'.format(self.short_names[case_ix]))
+        ax[2].set_ylabel('Usage percentage')
+        ax[2].set_xlabel('Timesteps')
+
+        obs = copy.deepcopy(this_episode.observations)
+        p_or = self._get_all_values(obs, 'p_or')
+        gen = self._get_all_values(obs, 'prod_p')
+        load = self._get_all_values(obs, 'load_p')
+
+        n_bus = this_episode.observations[-1].n_sub
+        g_ix = obs[-1].gen_to_subid
+        l_ix = obs[-1].load_to_subid
+        bus_zone1 = [0,1,2,3,4,6] # Hard coded
+        power_zone1, power_zone2 = self._obtain_zone_power(gen, load, g_ix, l_ix, bus_zone1, n_bus)
+
+        ax[0].plot(x, power_zone1, label='zone 1')
+        ax[0].plot(x, power_zone2, label='zone 2')
+        
+        ax[1].plot(x, power_zone1+power_zone2, label='difference')
+
+        #line_ix: 17 (4-5), 16 (3-8), 19 (6-8) # Hard coded
+        ax[2].plot(x, p_or[:, 16], label='line 16 (4-5)')
+        ax[2].plot(x, p_or[:, 17] + p_or[:, 19], label='line 17 and 19')
+        ax[2].plot(x, p_or[:, 16] + p_or[:, 17] + p_or[:, 19], label='cut')
+
+        ax[0].legend()
+        ax[1].legend()
+        ax[2].legend()
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(folder, "zone_flows"), dpi=self.resolution)
+        plt.close(fig)
+
+    
     def _add_plot_dispatch_and_redispatch(self, this_episode, case_ix=None, folder=None):
         """
         # Actual dispatch, target dispatch, redispatch actions
@@ -182,7 +247,7 @@ class Reviewer(object):
         acts = copy.deepcopy(this_episode.actions)
         actual_d = self._get_all_values(obs, 'actual_dispatch')
         target_d = self._get_all_values(obs, 'target_dispatch')
-        redisp_act = self._get_all_action_values(acts, 'redispatch')
+        redisp_act = self._get_all_action_values(acts, 'redispatch', n_gen=obs[-1].n_gen)
 
         plays = this_episode.meta['nb_timestep_played']
         x = np.arange(plays)
@@ -298,11 +363,16 @@ class Reviewer(object):
             ans.append(getattr(observations[i], str_function))
         return np.array(ans)
     
-    def _get_all_action_values(self, actions, action_key):
+    def _get_all_action_values(self, actions, action_key, n_gen=None):
         ans = []
         for i in range(len(actions)):
-            act = actions[i].as_dict()[action_key]
-            ans.append(act)
+            act = actions[i].as_dict()
+            try:
+                spec_act = act[action_key]
+            except KeyError:
+                spec_act = [0 for i in range(n_gen)]
+                
+            ans.append(spec_act)
         return np.array(ans)
 
     def _plot_grid(self, this_episode, obs, show=False, path=None):
@@ -314,6 +384,26 @@ class Reviewer(object):
         if not path is None:
             fig.savefig(path)
         plt.close(fig)
+    
+    def _obtain_zone_power(self, generation, load, gen_bix, load_bix, bus_listA, n_bus):
+        bus_listB = [i for i in range(n_bus) if i not in bus_listA]
+
+        bus_gen = np.zeros((generation.shape[0], n_bus))
+        bus_load = np.zeros((generation.shape[0], n_bus))
+
+        for g_ix in range(generation.shape[1]):
+            bus_gen[:, gen_bix[g_ix]] += generation[:, g_ix]
+        
+        for lo_ix in range(load.shape[1]):
+            bus_load[:, load_bix[lo_ix]] += load[:, lo_ix] 
+
+        genA = np.sum(bus_gen[:,bus_listA], axis=1)
+        loadA = np.sum(bus_load[:,bus_listA], axis=1)
+
+        genB = np.sum(bus_gen[:,bus_listB], axis=1)
+        loadB = np.sum(bus_load[:,bus_listB], axis=1)
+
+        return genA-loadA, genB-loadB
 
 if __name__ == "__main__":
 
@@ -334,5 +424,8 @@ if __name__ == "__main__":
     rev.analise_episode("0000")
     rev.analise_episode("0001")
     rev.analise_episode("0002")
+    rev.analise_episode("0017")
+    rev.analise_episode("0018")
+
 
 

@@ -23,9 +23,10 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
 
         self.ACTIONS_PER_GEN = 3
         self.redispatch_actions_dict = self._build_redispatch_dict()
+        print(self.redispatch_actions_dict)
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
-        # v2: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
+        # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
         self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + sum(self.obs_space.gen_redispatchable) + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
@@ -139,7 +140,6 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         """
         # nummber of actions: number of redispatches
         # 0: [(red_gen_id1, 0),(red_gen_id2, 0),(red_gen_id3, 0)]
-
         return self.action_space({"redispatch": self.redispatch_actions_dict[action]})
     
     def export_summary(self, log_path):
@@ -154,7 +154,7 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
             else:
                 res  = pd.concat([res, pd.DataFrame([(tf.make_ndarray(t)) for w, s, t in event_acc.Tensors(metric)])], axis=1)
         res.columns = cols
-        res.to_csv(os.path.join(log_path, 'summary.csv'))
+        res.to_csv(os.path.join(log_path, 'train_summary.csv'))
     
     def _find_file_in(self, path):
         files = os.listdir(path)
