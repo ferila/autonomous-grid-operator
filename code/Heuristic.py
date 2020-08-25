@@ -369,3 +369,6 @@ class TopologyPTDF(object):
             # just add a 0 column
             ans[max(ans.columns) + 1] = float(0)
         return ans
+
+class LineSelector(TopologyPTDF):
+    pass

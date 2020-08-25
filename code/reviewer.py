@@ -110,7 +110,8 @@ class Reviewer(object):
             ## Total demand and generation, generation by unit
             self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
             ## Zone balance
-            self._add_specific_topology_plot(this_episode, case_ix=ix, folder=image_folder)
+            self._add_specific_topology_lines_plot(this_episode, case_ix=ix, folder=image_folder)
+            #self._add_specific_topology_generation_plot(this_episode, case_ix=ix, folder=image_folder)
 
         # Save common graphs
         fig.tight_layout()
@@ -171,7 +172,7 @@ class Reviewer(object):
         ax[subplot_ix,0].legend(disp)
 
     
-    def _add_specific_topology_plot(self, this_episode, case_ix=None, folder=None):
+    def _add_specific_topology_lines_plot(self, this_episode, case_ix=None, folder=None):
         """
         Plot 1:
             - Net generation/consumption zone 1
@@ -189,18 +190,19 @@ class Reviewer(object):
         ax[0].set_ylabel('Power [MW]')
         ax[0].set_xlabel('Timesteps')
 
-        ax[1].set_title('Net power difference - {}'.format(self.short_names[case_ix]))
+        ax[1].set_title('Powerflow by lines and cut between zones - {}'.format(self.short_names[case_ix]))
         ax[1].set_ylabel('Power [MW]')
         ax[1].set_xlabel('Timesteps')
 
-        ax[2].set_title('Powerflow by lines and cut between zones - {}'.format(self.short_names[case_ix]))
-        ax[2].set_ylabel('Usage percentage')
+        ax[2].set_title('Lines usage - {}'.format(self.short_names[case_ix]))
+        ax[2].set_ylabel('Usage %')
         ax[2].set_xlabel('Timesteps')
 
         obs = copy.deepcopy(this_episode.observations)
         p_or = self._get_all_values(obs, 'p_or')
         gen = self._get_all_values(obs, 'prod_p')
         load = self._get_all_values(obs, 'load_p')
+        rho = self._get_all_values(obs, 'rho')
 
         n_bus = this_episode.observations[-1].n_sub
         g_ix = obs[-1].gen_to_subid
@@ -210,13 +212,18 @@ class Reviewer(object):
 
         ax[0].plot(x, power_zone1, label='zone 1')
         ax[0].plot(x, power_zone2, label='zone 2')
-        
-        ax[1].plot(x, power_zone1+power_zone2, label='difference')
 
         #line_ix: 17 (4-5), 16 (3-8), 19 (6-8) # Hard coded
-        ax[2].plot(x, p_or[:, 16], label='line 16 (4-5)')
-        ax[2].plot(x, p_or[:, 17] + p_or[:, 19], label='line 17 and 19')
-        ax[2].plot(x, p_or[:, 16] + p_or[:, 17] + p_or[:, 19], label='cut')
+        ax[1].plot(x, p_or[:, 16], label='line 16 (4-5)', alpha=self.alpha)
+        ax[1].plot(x, p_or[:, 17] + p_or[:, 19], label='line 17 and 19', alpha=self.alpha)
+        ax[1].plot(x, p_or[:, 16] + p_or[:, 17] + p_or[:, 19], label='cut', alpha=self.alpha)
+        
+        ax[2].plot(x, np.sign(p_or[:,17])*rho[:,17], label='line 17 (4-5)', alpha=self.alpha)
+        ax[2].plot(x, np.sign(p_or[:,16])*rho[:,16], label='line 16 (3-8)', alpha=self.alpha)
+        ax[2].plot(x, np.sign(p_or[:,19])*rho[:,19], label='line 19 (6-8)', alpha=self.alpha)
+        ax[2].plot(x, np.ones(rho.shape[0]), 'k--', alpha=self.alpha)
+        ax[2].plot(x, np.zeros(rho.shape[0]), 'k--', alpha=self.alpha)
+        ax[2].plot(x, -1*np.ones(rho.shape[0]), 'k--', alpha=self.alpha)
 
         ax[0].legend()
         ax[1].legend()
@@ -226,6 +233,27 @@ class Reviewer(object):
         fig.savefig(os.path.join(folder, "zone_flows"), dpi=self.resolution)
         plt.close(fig)
 
+    def _add_specific_topology_generation_plot(self, this_episode, case_ix=None, folder=None):
+        """
+        Plot 1:
+            - Net generation/consumption zone 1
+            - Generation zone 1
+        Plot 2:
+            - Powerflow line 17 (4-5)
+            - Powerflow line 16 (3-8) + 19 (6-8)
+            - Powerflow (cut) line 17 + 16 + 19
+        """
+
+        fig, ax = plt.subplots(3)
+        x = np.arange(this_episode.meta['nb_timestep_played'])
+
+        ax[0].set_title('Net power per zone - {}'.format(self.short_names[case_ix]))
+        ax[0].set_ylabel('Power [MW]')
+        ax[0].set_xlabel('Timesteps')
+
+        ax[1].set_title('Powerflow by lines and cut between zones - {}'.format(self.short_names[case_ix]))
+        ax[1].set_ylabel('Power [MW]')
+        ax[1].set_xlabel('Timesteps')
     
     def _add_plot_dispatch_and_redispatch(self, this_episode, case_ix=None, folder=None):
         """
@@ -407,25 +435,19 @@ class Reviewer(object):
 
 if __name__ == "__main__":
 
-    test_case = 'tTwo_sandbox'
+    # test_case = 'tTwo_sandbox'
 
-    agent1 = "{}_DoNothing".format(test_case)
-    agent2 = "{}_D3QN".format(test_case)
-    agent3 = "{}_MyPTDFAgent".format(test_case)
+    # agent1 = "{}_DoNothing".format(test_case)
+    # agent2 = "{}_D3QN".format(test_case)
+    # agent3 = "{}_MyPTDFAgent".format(test_case)
     #ag_paths = [agent2] # agent1, agent3
-    ag_paths = ["tZero_sandbox_D3QN", "tThree_sandbox_D3QN"]
-    short_names = ["D3QN (zero)", "D3QN (three)"] # "DoNothing", "ExpertSystem"
+    ag_paths = ["yZero_sandbox_D3QN", "yRZero_sandbox_D3QN", "yTZero_sandbox_D3QN"]
+    short_names = ["D3QN (l2rpn)", "D3QN (redisp)", "D3QN (lidi)"] # "DoNothing", "ExpertSystem"
 
     path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
-    rev = Reviewer(path_save, ag_paths, name='bestDqns', short_names=short_names)
+    rev = Reviewer(path_save, ag_paths, name='3rew', short_names=short_names)
 
-    rev.resume_episodes() # do a graph for all agents
-    
-    rev.analise_episode("0000")
-    rev.analise_episode("0001")
-    rev.analise_episode("0002")
-    rev.analise_episode("0017")
-    rev.analise_episode("0018")
-
-
-
+    rev.resume_episodes() # do a graph for all agents    
+    selected_episodes = ["0002", "0007", "0017", "0018"]
+    for ep in selected_episodes:
+        rev.analise_episode(ep)

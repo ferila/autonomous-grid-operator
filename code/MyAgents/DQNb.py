@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import pandas as pd
+from Actions import RedispatchActions
 from l2rpn_baselines.DoubleDuelingDQN import DoubleDuelingDQN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN_NN import DoubleDuelingDQN_NN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQNConfig import DoubleDuelingDQNConfig as cfg
@@ -9,7 +10,7 @@ from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQNConfig import DoubleDuelin
 import tensorflow as tf
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-class MyDoubleDuelingDQN(DoubleDuelingDQN):
+class D3QN(DoubleDuelingDQN):
 
     def __init__(self, observation_space, action_space, name=__name__, is_training=False, num_frames=4, batch_size=32, lr=1e-5):
         super().__init__(observation_space,
@@ -21,15 +22,15 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         self.batch_size = batch_size
         self.lr = lr
 
-        self.ACTIONS_PER_GEN = 3
-        self.redispatch_actions_dict = self._build_redispatch_dict()
+        red_acts = RedispatchActions(observation_space, action_space)
+        self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
         print(self.redispatch_actions_dict)
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
         # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
-        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + sum(self.obs_space.gen_redispatchable) + 3
+        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
-        self.action_size = self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
+        self.action_size = len(self.redispatch_actions_dict) #self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
 
         # Load network graph
         self.Qmain = DoubleDuelingDQN_NN(self.action_size,
@@ -42,54 +43,6 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         # Setup training vars if needed
         if self.is_training:
             self._init_training()
-
-    def _build_redispatch_dict(self):     
-        res_dict = {}
-        gen_action_ixs = [0 for i in range(sum(self.obs_space.gen_redispatchable))]
-        for i in range(self.action_size):
-            res_dict[i] = self._add_group_action(gen_action_ixs)
-            gen_action_ixs = self._change_action_ixs(i, gen_action_ixs)
-        return res_dict
-
-    def _add_group_action(self, gen_action):
-        redis_gen_ids = np.array(range(self.obs_space.n_gen))[self.obs_space.gen_redispatchable]
-        one_action = []
-        for i, g_id in enumerate(redis_gen_ids):
-            act_g = self._get_gen_action(g_id, gen_action[i])
-            one_action.append((g_id, act_g))
-        return one_action
-    
-    def _get_gen_action(self, gen_id, action_ix):
-        """
-        Define the granularity of actions. Intermediated values could be added.
-        If add here, change parameter self.ACTIONS_PER_GEN
-        """
-        if action_ix == 0:
-            return -self.obs_space.gen_max_ramp_down[gen_id]
-        elif action_ix == 1:
-            return 0
-        elif action_ix == 2:
-            return self.obs_space.gen_max_ramp_up[gen_id]
-        else:
-            raise Exception("Action index out of bounds")
-
-    def _change_action_ixs(self, act_ix, gen_action_ixs):
-        """
-        cont_g_ix tells which generator is changing.
-        gen_action_ixs contains action index for each generator.
-        """
-        limits = [self.ACTIONS_PER_GEN ** i for i in range(sum(self.obs_space.gen_redispatchable))]
-        # [1, 3, 9]
-        
-        for ix, gen_lim in enumerate(limits):
-            if (act_ix + 1) % gen_lim == 0:
-                if gen_action_ixs[ix] == (self.ACTIONS_PER_GEN - 1):
-                    gen_action_ixs[ix] = 0
-                else:
-                    gen_action_ixs[ix] += 1
-
-        return gen_action_ixs
-
         
     def convert_obs(self, observation):
         # v1: rho + prod_p + minutes + hour + day
@@ -118,7 +71,7 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
             gen = observation.prod_p / (observation.gen_pmax * 1.1) #1.1 because prod_p seems to go beyond the maximum
             res.append(gen)
         
-        if True:
+        if False:
             # include actual dispatch
             max_disp = observation.gen_pmax
             min_disp = -observation.gen_pmax
@@ -160,3 +113,43 @@ class MyDoubleDuelingDQN(DoubleDuelingDQN):
         files = os.listdir(path)
         fname = files[0] # there is only one file
         return os.path.join(path, fname)
+
+class D3QNH(DoubleDuelingDQN):
+
+    def __init__(self, observation_space, action_space, tph_ptdf=None, name=__name__, is_training=False, num_frames=4, batch_size=32, lr=1e-5):
+        super().__init__(observation_space,
+                        action_space,
+                        name=name,
+                        is_training=is_training)
+        
+        self.num_frames = num_frames
+        self.batch_size = batch_size
+        self.lr = lr
+        self.tph_ptdf = tph_ptdf
+
+        self.ACTIONS_PER_GEN = 3
+        self.redispatch_actions_dict = self._build_redispatch_dict()
+        print(self.redispatch_actions_dict)
+        
+        # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
+        # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
+        # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
+        self.observation_size = self.heuristic.get_line_observation_size() + self.obs_space.n_gen + sum(self.obs_space.gen_redispatchable) + 3
+        
+        self.action_size = self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
+
+        # Load network graph
+        self.Qmain = DoubleDuelingDQN_NN(self.action_size,
+                                        self.observation_size,
+                                        num_frames = self.num_frames,
+                                        learning_rate = self.lr,
+                                        learning_rate_decay_steps = cfg.LR_DECAY_STEPS,
+                                        learning_rate_decay_rate = cfg.LR_DECAY_RATE)
+        
+        # Setup training vars if needed
+        if self.is_training:
+            self._init_training()
+        
+
+    def convert_obs(self, observation):
+        ptdf = self.tph_ptdf.check_calculated_matrix(obs.line_status)
