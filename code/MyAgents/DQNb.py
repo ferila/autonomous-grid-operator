@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import pandas as pd
-from Actions import RedispatchActions
+from .Actions import RedispatchActions
 from l2rpn_baselines.DoubleDuelingDQN import DoubleDuelingDQN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN_NN import DoubleDuelingDQN_NN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQNConfig import DoubleDuelingDQNConfig as cfg
@@ -56,7 +56,7 @@ class D3QN(DoubleDuelingDQN):
             min_val = -powerflow_limit
             # new_val_x = min_new + (max_new - min_new) * (val_x - min_x) / (max_x - min_x)
             #pflow = -1 + 2 * (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
-            pflow = (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
+            pflow = (np.sign(observation.p_or) * abs(observation.rho) - min_val) / (max_val - min_val) 
             res.append(pflow)
         
         if False:
@@ -68,21 +68,22 @@ class D3QN(DoubleDuelingDQN):
         
         if True:
             # include generation observations
-            gen = observation.prod_p / (observation.gen_pmax * 1.1) #1.1 because prod_p seems to go beyond the maximum
+            gen = observation.prod_p / (observation.gen_pmax * 1.1) # 1.1 (bef 1.1) because prod_p seems to go beyond the maximum
             res.append(gen)
         
         if False:
             # include actual dispatch
             max_disp = observation.gen_pmax
             min_disp = -observation.gen_pmax
-            actual_d = (observation.actual_dispatch - min_disp) / (max_disp - min_disp)
+            actual_d = (observation.actual_dispatch - min_disp) / (max_disp - min_disp) #0.01 + (1 - 0.01) *
             res.append(actual_d[observation.gen_redispatchable])
 
-        # include time (year not included, should work only on long term)
-        res.append(np.array([observation.minute_of_hour / 60]))
-        res.append(np.array([observation.hour_of_day / 24]))
-        res.append(np.array([observation.day_of_week / 7]))
-        #res.append(observation.month / 12)
+        if True:
+            # include time (year not included, should work only on long term)
+            res.append(np.array([observation.minute_of_hour / 60]))
+            res.append(np.array([observation.hour_of_day / 24]))
+            res.append(np.array([observation.day_of_week / 7]))
+            #res.append(observation.month / 12)
         
         return np.concatenate(res)
 

@@ -18,12 +18,15 @@ class RedispatchActions(object):
         cont = 0
         for i in range(possible_actions):
             candidate_group_action = self._get_group_action(gen_action_ixs)
-            balance_generation = sum([a[1] for a in candidate_group_action])
-            # As current dispatch already balance demand (setpoint), 
-            # the idea is to not change the total setpoint
-            if abs(balance_generation) <= self.MAXIMUM_SETPOINT_CHANGE:
-                res_dict[cont] = candidate_group_action
-                cont += 1
+            if True: # reduced actions
+                balance_generation = sum([a[1] for a in candidate_group_action])
+                # As current dispatch already balance demand (setpoint), 
+                # the idea is to not change the total setpoint
+                if abs(balance_generation) <= self.MAXIMUM_SETPOINT_CHANGE:
+                    res_dict[cont] = candidate_group_action
+                    cont += 1
+            if False:
+                res_dict[i] = candidate_group_action
             gen_action_ixs = self._change_action_ixs(i, gen_action_ixs)
         return res_dict
 

@@ -4,7 +4,7 @@ import grid2op
 from MyRunner import MyRunner
 from Heuristic import TopologyPTDF
 from grid2op.Reward import L2RPNReward, RedispReward
-from MyRewards.LiDiReward import LidiReward
+from MyRewards.XDiReward import LidiReward, OvdiReward
 from grid2op.Agent import DoNothingAgent
 from MyAgents.DQNb import D3QN, D3QNH
 from MyAgents.ExpertSystem import ExpertSystem
@@ -21,23 +21,29 @@ from MyAgents.ExpertSystem import ExpertSystem
 # yT: lidi reward
 
 if __name__ == "__main__":
+    reward_to_use = L2RPNReward
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp"
-        for case_name in ["D3QN"]: #"DoNothing" "ExpertSystem" "D3QN"
-            test_name = "yTZero"
-            start_time = time.time()
-            print("-------------{}--------------".format(case_name))
-            print("start time: {}".format(start_time))
-
-            aa = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
-            case = "{}_{}_{}".format(test_name, aa[env_case_name], case_name)
+        environ = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
+        # notes for each agent case and its version
+        notes = {
+            "D3QN": "Reduced actions.\nrho, prod_p and time as observations (returned gen factor 1.3to1.1 and flow range 0.01 to 0).\n25k training iterations"
+        }
+        # version should change when case is repeated (same env-agent-reward)
+        for case_name, version in [("D3QN", 1)]: #"DoNothing" "ExpertSystem" "D3QN"
+            case = "_AGC_{}_{}_{}_v{}".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
                 os.mkdir(path_save)
+            with open(os.path.join(path_save, "NOTES.txt"), "w") as f:
+                f.write("{}\n".format(notes[case_name]))
 
+            start_time = time.time()
+            print("-------------{}--------------".format(case_name))
+            print("start time: {}".format(start_time))
             #TODO from grid2op.Reward import GameplayReward
             #TODO env = grid2op.make("l2rpn_wcci_2020", reward_class=GameplayReward)
             env_name = env_case_name # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
-            env = grid2op.make(env_name, reward_class=LidiReward) 
+            env = grid2op.make(env_name, reward_class=reward_to_use) 
             # from grid2op.Reward import L2RPNReward, FlatReward
             # env = grid2op.make(reward_class=L2RPNReward,
             #                    other_rewards={"other_reward": FlatReward})

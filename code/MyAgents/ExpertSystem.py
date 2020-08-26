@@ -2,10 +2,90 @@ import sys
 import copy
 import numpy as np
 from grid2op.Agent import BaseAgent
-from Actions import RedispatchActions
+from .Actions import RedispatchActions
 
 class ExpertSystem(BaseAgent):
     def __init__(self, observation_space, action_space, tph_ptdf):
+        super().__init__(action_space)
+        self.tph_ptdf = tph_ptdf
+        self.obs_space = observation_space
+        red_acts = RedispatchActions(observation_space, action_space)
+        self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
+    
+    def act(self, obs, reward, done):
+        # act only if flows are over its limits
+        if np.sum(obs.rho > 1):
+            line_ix = np.argmax(obs.rho)
+            best_action = self._analyse_dispatch_options(obs, line_ix)
+            act = self.action_space({"redispatch": self.redispatch_actions_dict[best_action]})
+        else:
+            act = self.action_space({})
+        return act
+    
+    def _analyse_dispatch_options(self, obs, line_ix):
+        """
+        select best action among the availables in redispatch_action_dict
+        """
+
+        # calculate current scenario
+        ptdf_matrix = self._check_topology_change(obs)
+        current_net_gen_sub = self.__gen_by_sub(obs)
+        ptdf_current_flow = ptdf_matrix.loc[line_ix,:].dot(current_net_gen_sub)
+        overflow = obs.rho[line_ix] - 1
+
+        lower_target_flow = 1
+
+        for act, redisp in self.redispatch_actions_dict.items():
+            next_net_gen_sub = self.__add_power(current_net_gen_sub, redisp, obs)
+            #predicted_flow = ptdf_matrix.dot(next_net_gen_sub)
+            target_line_flow = abs(ptdf_matrix.loc[line_ix, :].dot(next_net_gen_sub) / (ptdf_current_flow * (1-overflow)))
+            #has_overflows = self.__check_overflows(predicted_flow)
+            if target_line_flow < lower_target_flow: # and not has_overflows:
+                best_action = act
+                lower_target_flow = target_line_flow
+        
+        return best_action
+
+    def _check_topology_change(self, obs):
+        """
+        It checks if ptdf matrix is already created for the actual operational lines.
+        Return: ptdf matrix
+        """
+        return self.tph_ptdf.check_calculated_matrix(obs.line_status)
+
+    @staticmethod
+    def __gen_by_sub(observation):
+        """
+        Return an array with the total generation of each bus
+        """
+        total_gen = np.zeros(observation.n_sub)
+        for i, g in enumerate(observation.prod_p):
+            sub = observation.gen_to_subid[i]
+            total_gen[sub] += g
+        for i, l in enumerate(observation.load_p):
+            sub = observation.load_to_subid[i]
+            total_gen[sub] -= l
+
+        return total_gen
+    
+    @staticmethod
+    def __add_power(current, redispatch, observation):
+        for g_ix, redisp_pw in redispatch:
+            sub_ix = observation.gen_to_subid[g_ix]
+            current[sub_ix] += redisp_pw
+        return current
+    
+    @staticmethod
+    def __check_overflows(flows):
+        ans = False
+        return ans
+
+class MyFirstAgent(BaseAgent):
+    """
+    Deprecated
+    """
+    def __init__(self, observation_space, action_space, tph_ptdf):
+        raise Exception("Class deprecated, use ExpertSystem instead.")
         super().__init__(action_space)
         self.tph_ptdf = tph_ptdf
         self.obs_space = observation_space

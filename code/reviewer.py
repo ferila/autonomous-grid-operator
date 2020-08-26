@@ -14,7 +14,16 @@ mpl.rcParams['legend.fontsize'] = 'small'
 mpl.rcParams['figure.titlesize'] = 'small'
 
 class Reviewer(object):
-    def __init__(self, path_save, agent_paths, name="default", short_names=[]):
+    def __init__(self, path_save, analysis_path, agent_paths, name="default", short_names=[], notes=[]):
+        # create analysis folder
+        if not os.path.exists(analysis_path):
+            os.mkdir(analysis_path)
+        self.analysis_path = analysis_path
+        # create note explanation of what was analysed
+        with open(os.path.join(analysis_path, "NOTES.txt"), "w") as f:
+            for i, n in enumerate(notes):
+                f.write("{} ({}): {}\n".format(short_names[i], agent_paths[i], n))
+
         self.resolution = 720
         self.fontsize = 8
         self.alpha = 0.7
@@ -78,7 +87,7 @@ class Reviewer(object):
         #from matplotlib.legend import Legend
         #leg = Legend(ax, lines[2:], ['line C', 'line D'], loc='lower right', frameon=False)
         #ax.add_artist(leg)
-        fig.savefig(os.path.join(self.path_save,"{}_episodes_resume".format(self.name)), dpi=self.resolution)
+        fig.savefig(os.path.join(self.analysis_path,"{}_episodes_resume".format(self.name)), dpi=self.resolution)
         plt.close(fig)
 
     def analise_episode(self, episode_studied, last_frames=5, avoid_agents=[]):
@@ -90,7 +99,7 @@ class Reviewer(object):
                 
         for ix, c in enumerate(cases):
             this_episode = EpisodeData.from_disk(c, episode_studied)
-            image_folder = os.path.join(self.path_save, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
+            image_folder = os.path.join(self.analysis_path, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
             if not os.path.exists(image_folder):
                 os.mkdir(image_folder)
 
@@ -116,8 +125,8 @@ class Reviewer(object):
         # Save common graphs
         fig.tight_layout()
         fig2.tight_layout()
-        fig.savefig(os.path.join(self.path_save, "{}_rewards_lineDiscon_overf_{}".format(self.name, episode_studied)), dpi=self.resolution)
-        fig2.savefig(os.path.join(self.path_save, "{}_generation_{}".format(self.name, episode_studied)), dpi=self.resolution)
+        fig.savefig(os.path.join(self.analysis_path, "{}_rewards_lineDiscon_overf_{}".format(self.name, episode_studied)), dpi=self.resolution)
+        fig2.savefig(os.path.join(self.analysis_path, "{}_generation_{}".format(self.name, episode_studied)), dpi=self.resolution)
         plt.close(fig)
         plt.close(fig2)
 
@@ -339,6 +348,8 @@ class Reviewer(object):
         """
         For now, only saves an image table of last (frames) values
         """
+        if last_frames > this_episode.meta['nb_timestep_played']:
+            last_frames = this_episode.meta['nb_timestep_played']
         obs = copy.deepcopy(this_episode.observations)
         rows = obs[-1].n_gen + obs[-1].n_line + obs[-1].n_load
         matrix = np.zeros((rows, last_frames))
@@ -372,7 +383,8 @@ class Reviewer(object):
         """
         Saves grid with values from the specified last last_frames
         """
-
+        if last_frames > this_episode.meta['nb_timestep_played']:
+            last_frames = this_episode.meta['nb_timestep_played']
         images = []
         obs = copy.deepcopy(this_episode.observations)
         for fr in range(last_frames):
@@ -441,13 +453,30 @@ if __name__ == "__main__":
     # agent2 = "{}_D3QN".format(test_case)
     # agent3 = "{}_MyPTDFAgent".format(test_case)
     #ag_paths = [agent2] # agent1, agent3
-    ag_paths = ["yZero_sandbox_D3QN", "yRZero_sandbox_D3QN", "yTZero_sandbox_D3QN"]
-    short_names = ["D3QN (l2rpn)", "D3QN (redisp)", "D3QN (lidi)"] # "DoNothing", "ExpertSystem"
+    #ag_paths = ["yZero_sandbox_D3QN", "yRZero_sandbox_D3QN", "yTZero_sandbox_D3QN"]
 
-    path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
-    rev = Reviewer(path_save, ag_paths, name='3rew', short_names=short_names)
+    analysis_folder_name = "reward_and_actions_comparison"
+    ag_paths = ["_AGC_sandbox_D3QN_L2RPNReward_v1", 
+                "_AGC_sandbox_D3QN_L2RPNReward_v2",
+                "_AGC_sandbox_D3QN_RedispReward_v1",
+                "_AGC_sandbox_D3QN_RedispReward_v2"]
+    short_names = ["D3QN (l2rpn sact)", 
+                    "D3QN (l2rpn full)",
+                    "D3QN (redisp sact)",
+                    "D3QN (redisp full)"] # "DoNothing", "ExpertSystem"
+    notes = [
+        "RedispReward. Reduced actions. rho, prod_p and time as observations. 25k training iterations",
+        "RedispReward. Not reduced actions. rho, prod_p and time as observations. 25k training iterations",
+        "L2RPNReward. Reduced actions. rho, prod_p and time as observations. 25k training iterations",
+        "L2RPNReward. Not reduced actions. rho, prod_p and time as observations. 25k training iterations"
+        ]
+    selected_episodes = ["0002", "0003", "0007", "0017", "0018"]
+
+
+    run_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
+    analysis_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\_STDY_{}'.format(analysis_folder_name)
+    rev = Reviewer(run_path, analysis_path, ag_paths, name='a', short_names=short_names, notes=notes)
 
     rev.resume_episodes() # do a graph for all agents    
-    selected_episodes = ["0002", "0007", "0017", "0018"]
     for ep in selected_episodes:
         rev.analise_episode(ep)

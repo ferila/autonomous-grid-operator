@@ -9,6 +9,7 @@ import pandapower as pp
 class TopologyHeuristic(object):
 
     def __init__(self, grid=None, path=None):
+        raise Exception("Deprecated")
         if os.path.exists(os.path.join(path, "ptdf_matrix.csv")):
             self.ptdf_matrix = self._load_ptdf_matrix(path)
             self.lodf_matrix = self._load_lodf_matrix(path)
