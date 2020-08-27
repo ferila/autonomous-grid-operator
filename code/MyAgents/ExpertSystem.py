@@ -8,14 +8,15 @@ class ExpertSystem(BaseAgent):
     def __init__(self, observation_space, action_space, tph_ptdf):
         super().__init__(action_space)
         self.tph_ptdf = tph_ptdf
+        self.overflow_threshold = 0.95
         self.obs_space = observation_space
         red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0)
         self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
     
     def act(self, obs, reward, done):
         # act only if flows are over its limits
-        if np.sum(obs.rho > 1):
-            line_ix = np.argmax(obs.rho)
+        if np.sum(np.abs(obs.rho) > self.overflow_threshold):
+            line_ix = np.argmax(np.abs(obs.rho))
             best_action = self._analyse_dispatch_options(obs, line_ix)
             act = self.action_space({"redispatch": self.redispatch_actions_dict[best_action]})
         else:
@@ -31,14 +32,14 @@ class ExpertSystem(BaseAgent):
         ptdf_matrix = self._check_topology_change(obs)
         current_net_gen_sub = self.__gen_by_sub(obs)
         ptdf_current_flow = ptdf_matrix.loc[line_ix,:].dot(current_net_gen_sub)
-        overflow = obs.rho[line_ix] - 1
+        overflow = np.abs(obs.rho[line_ix]) - self.overflow_threshold
 
-        lower_target_flow = 1
+        lower_target_flow = 1000
 
         for act, redisp in self.redispatch_actions_dict.items():
             next_net_gen_sub = self.__add_power(current_net_gen_sub, redisp, obs)
             #predicted_flow = ptdf_matrix.dot(next_net_gen_sub)
-            target_line_flow = abs(ptdf_matrix.loc[line_ix, :].dot(next_net_gen_sub) / (ptdf_current_flow * (1-overflow)))
+            target_line_flow = abs(ptdf_matrix.loc[line_ix, :].dot(next_net_gen_sub) / (ptdf_current_flow * (1 - overflow)))
             #has_overflows = self.__check_overflows(predicted_flow)
             if target_line_flow < lower_target_flow: # and not has_overflows:
                 best_action = act

@@ -4,6 +4,58 @@ from grid2op.Exceptions import Grid2OpException
 from grid2op.Reward.BaseReward import BaseReward
 from grid2op.dtypes import dt_float
 
+class FoolReward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        self.reward_min = dt_float(-1.0)
+        self.reward_max = dt_float(10.0)
+    
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        if action.as_dict():
+            return self.reward_min
+        else:
+            return self.reward_max
+
+class DiReward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0.95)
+        self.reward_min = dt_float(-20.0*env.n_line - 1.0)
+        self.reward_max = dt_float(0.0)
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        if has_error or is_illegal or is_ambiguous:
+            return dt_float(-10)
+        else:
+            # overflow lower than is_illegal
+            ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+            thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+            relative_flow = np.divide(ampere_flows, thermal_limits, dtype=dt_float)
+            over_flow = (relative_flow - self.overflow_threshold)
+            ovf_cost = dt_float(-20*np.sum(over_flow > 0))
+
+            # innecesary action (not donothing) better than is_illegal but worst than donothing
+            # do_nothing reward 0 (it is preferable doing something than do not avoid overflows)
+            if action.as_dict():
+                action_cost = dt_float(-1.0)
+            else:
+                action_cost = dt_float(0.0)
+
+            ans = ovf_cost + action_cost
+            if ans < -200:
+                print("super negative reward: {}".format(ans))
+                print(action.as_dict())
+                print(env.backend.get_relative_flow())
+
+            return ans
+
 class OvdiReward(BaseReward):
     """
     This reward can be used for environments where redispatching is availble. 

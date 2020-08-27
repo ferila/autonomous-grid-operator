@@ -29,7 +29,7 @@ class D3QN(DoubleDuelingDQN):
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
         # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
-        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen
+        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = len(self.redispatch_actions_dict) #self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
 
@@ -57,7 +57,6 @@ class D3QN(DoubleDuelingDQN):
             #pflow = -1 + 2 * (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
             pflow = (np.sign(observation.p_or) * abs(observation.rho) - min_val) / (max_val - min_val) 
             res.append(pflow)
-            print(observation.rho)
         
         if False:
             # include load_p observations
@@ -78,7 +77,7 @@ class D3QN(DoubleDuelingDQN):
             actual_d = (observation.actual_dispatch - min_disp) / (max_disp - min_disp) #0.01 + (1 - 0.01) *
             res.append(actual_d[observation.gen_redispatchable])
 
-        if False:
+        if True:
             # include time (year not included, should work only on long term)
             res.append(np.array([observation.minute_of_hour / 60]))
             res.append(np.array([observation.hour_of_day / 23]))
@@ -135,9 +134,12 @@ class D3QN(DoubleDuelingDQN):
         self._save_hyperparameters(save_path, env, num_steps)
 
         action_backup = np.zeros(num_steps) #### @felipe
+        qaction_backup = np.zeros(num_steps) #### @felipe
+        qaction_backup[:] = np.NaN #### @felipe
         qval_backup = np.zeros((num_steps, self.action_size)) #### @felipe
+        qval_backup[:] = np.nan #### @felipe
         reward_backup = np.zeros(num_steps) #### @felipe
-        step_lasted = []
+        step_lasted = [] #### @felipe
 
         # Training loop
         while step < num_steps:
@@ -161,8 +163,7 @@ class D3QN(DoubleDuelingDQN):
             else:
                 a, q_actions = self.Qmain.predict_move(np.array(self.frames))
                 qval_backup[step] = q_actions #### @felipe
-                print(q_actions) #### @felipe
-                print("actSel: {}".format(a)) #### @felipe
+                qaction_backup[step] = a #### @felipe
             action_backup[step] = a #### @felipe
 
 
@@ -214,7 +215,7 @@ class D3QN(DoubleDuelingDQN):
             if self.done:
                 self.epoch_rewards.append(total_reward)
                 self.epoch_alive.append(alive_steps)
-                step_lasted.append(alive_steps)
+                step_lasted.append(alive_steps) #### @felipe
                 if cfg.VERBOSE:
                     print("Survived [{}] steps".format(alive_steps))
                     print("Total reward [{}]".format(total_reward))
@@ -235,43 +236,57 @@ class D3QN(DoubleDuelingDQN):
 
         # Save model after all steps
         self.save(modelpath)
-        self._save_act_and_qval(action_backup, qval_backup, reward_backup, step_lasted, path_save=logdir) #### @felipe
+        self._save_act_and_qval(action_backup, qaction_backup, qval_backup, reward_backup, step_lasted, path_save=logdir) #### @felipe
     
-    def _save_act_and_qval(self, actions, qvalues, rewards, step_lasted, path_save=None):
+    def _save_act_and_qval(self, actions, qactions, qvalues, rewards, step_lasted, path_save=None):
         acts_df = pd.DataFrame(actions, columns=['action'])
+        qacts_df = pd.DataFrame(qactions, columns=['action'])
         qvals_df = pd.DataFrame(qvalues, columns=['Qv{}'.format(i) for i in range(qvalues.shape[1])])
         rew_df = pd.DataFrame(rewards, columns=['reward'])
         step_df = pd.DataFrame(step_lasted, columns=['steps'])
 
-        file_act = os.path.join(path_save, "actions.csv")
-        file_qval = os.path.join(path_save, "qvalues.csv")
-        file_rew = os.path.join(path_save, "rewards.csv")
-        file_steps = os.path.join(path_save, "rewards.csv")
-        acts_df.to_csv(file_act)
-        qvals_df.to_csv(file_qval)
-        rew_df.to_csv(file_rew)
-        step_df.to_csv(file_steps)
+        acts_df.to_csv(os.path.join(path_save, "actions.csv"))
+        qacts_df.to_csv(os.path.join(path_save, "qactions.csv"))
+        qvals_df.to_csv(os.path.join(path_save, "qvalues.csv"))
+        rew_df.to_csv(os.path.join(path_save, "rewards.csv"))
+        step_df.to_csv(os.path.join(path_save, "steps.csv"))
 
+        # all actions histogram
         ax = acts_df.plot(kind='hist', bins=self.action_size) 
         fig = ax.get_figure()
-        fig.savefig(os.path.join(path_save, 'actions_histogram'))
+        fig.savefig(os.path.join(path_save, '_actions_histogram'))
 
+        # all actions evolution
         acts_df['index'] = acts_df.index
         ax1 = acts_df.plot(kind='scatter', x='index', y='action', alpha=0.05, edgecolors='none')
         fig1 = ax1.get_figure()
-        fig1.savefig(os.path.join(path_save, 'action_selection_evolution'), dpi=360)
+        fig1.savefig(os.path.join(path_save, '_action_selection_evolution'), dpi=360)
 
+        # q-actions histogram
+        ax = qacts_df.plot(kind='hist', bins=self.action_size) 
+        fig = ax.get_figure()
+        fig.savefig(os.path.join(path_save, '_qactions_histogram'))
+
+        # q-actions evolution
+        qacts_df['index'] = qacts_df.index
+        ax1 = qacts_df.plot(kind='scatter', x='index', y='action', alpha=0.05, edgecolors='none')
+        fig1 = ax1.get_figure()
+        fig1.savefig(os.path.join(path_save, '_qaction_selection_evolution'), dpi=360)
+
+        # q-values evolution
         ax2 = qvals_df.plot()
         fig2 = ax2.get_figure()
-        fig2.savefig(os.path.join(path_save, 'qvalues_evolution'), dpi=360)
+        fig2.savefig(os.path.join(path_save, '_qvalues_evolution'), dpi=360)
 
+        # reward evolution
         ax3 = rew_df.plot()
         fig3 = ax3.get_figure()
-        fig3.savefig(os.path.join(path_save, 'reward_evolution'), dpi=360)   
+        fig3.savefig(os.path.join(path_save, '_reward_evolution'), dpi=360)   
 
+        # max steps reached evolution
         ax4 = step_df.plot()
         fig4 = ax4.get_figure()
-        fig4.savefig(os.path.join(path_save, 'max_steps_evolution'), dpi=360)      
+        fig4.savefig(os.path.join(path_save, '_max_steps_evolution'), dpi=360)      
 
     def export_summary(self, log_path):
         file_path = self._find_file_in(log_path)

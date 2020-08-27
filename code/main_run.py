@@ -3,9 +3,10 @@ import time
 import shutil
 import grid2op
 from MyRunner import MyRunner
+from MyReviewer import Reviewer
 from Heuristic import TopologyPTDF
 from grid2op.Reward import L2RPNReward, RedispReward
-from MyRewards.XDiReward import LidiReward, OvdiReward
+from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward
 from grid2op.Agent import DoNothingAgent
 from MyAgents.DQNb import D3QN, D3QNH
 from MyAgents.ExpertSystem import ExpertSystem
@@ -22,28 +23,28 @@ from MyAgents.ExpertSystem import ExpertSystem
 # yT: lidi reward
 
 if __name__ == "__main__":
-    reward_to_use = L2RPNReward #GameplayReward in "l2rpn_wcci_2020"
+    #reward_to_use = DiReward #GameplayReward in "l2rpn_wcci_2020"
     train_iter = 25000
+    NUM_FRAMES = 4
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp" # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
         environ = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
         # notes for each agent case and its version
         notes = {
-            ("D3QN", 'test'): "In this version\n\
-                learning rate 0.95 to 0.85\n\
-                Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step 5 for each generator.\n\
-                Observations: only rho and prod_p, NO time (gen factor 1.2, flow factor 1.1)"
+            'fr4': "In this version:\n\
+                Hyperparams: num_frames 4. \n\
+                Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step of 5MW for each generator.\n\
+                Observations: only rho and prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)"
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version in [("D3QN", 'test')]: #"DoNothing" "ExpertSystem" "D3QN"
-            case = "_AGC_{}_{}_{}_v{}".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
+        for case_name, version, reward_to_use in [("D3QN", 'fr4', DiReward)]: #"DoNothing" "ExpertSystem" "D3QN"
+            case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
                 os.mkdir(path_save)
             else:
-                shutil.rmtree(path_save)
-                os.mkdir(path_save)
+                raise Exception('Folder already exists')
             with open(os.path.join(path_save, "NOTES.txt"), "w") as f:
-                f.write("{}\n".format(notes[(case_name, version)]))
+                f.write("{}\n".format(notes[version]))
 
             start_time = time.time()
             print("-------------{}--------------".format(case_name))
@@ -81,15 +82,15 @@ if __name__ == "__main__":
                     if not os.path.exists(log_path):
                         os.mkdir(log_path)
                     #DEFAULT VALUES: num_frames=4, batch_size=32, lr=1e-5
-                    agent = D3QN(env.observation_space, env.action_space, name=agent_name, is_training=True)
+                    agent = D3QN(env.observation_space, env.action_space, name=agent_name, is_training=True, num_frames=NUM_FRAMES)
                     agent.train(env, train_iter, path_save, logdir=log_path)
                     agent.export_summary(log_path=os.path.join(log_path, agent_name))
                 else:
-                    agent = D3QN(env.observation_space, env.action_space)
+                    agent = D3QN(env.observation_space, env.action_space, num_frames=NUM_FRAMES)
                     agent.load(agent_nn_path)
                     
             # fight!
-            if  False:
+            if  True:
                 # create the proper runner
                 dict_params = env.get_params_for_runner()
                 runner = MyRunner(**dict_params, agentClass=None, agentInstance=agent)
@@ -102,5 +103,21 @@ if __name__ == "__main__":
                         msg_tmp += "\t\t - total score: {:.6f}\n".format(cum_reward)
                         msg_tmp += "\t\t - number of time steps completed: {:.0f} / {:.0f}".format(nb_time_step, max_ts)
                         print(msg_tmp)
+                
+
+                # exporting analysis
+                analysis_folder_name = "agent_analysis"
+                ag_paths = [case]
+                short_names = [case_name]
+                notes = [notes[version]]
+                selected_episodes = ["0002", "0003", "0007", "0017", "0018"]
+
+                run_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
+                analysis_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}\\_STDY_{}'.format(case, analysis_folder_name)
+                rev = Reviewer(run_path, analysis_path, ag_paths, name='a', short_names=short_names, notes=notes, self_analysis=True)
+
+                rev.resume_episodes()
+                for ep in selected_episodes:
+                    rev.analise_episode(ep)
             
             print("--- {} hours ---".format((time.time() - start_time)/3600))
