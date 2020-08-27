@@ -2,14 +2,14 @@ import sys
 import copy
 import numpy as np
 from grid2op.Agent import BaseAgent
-from .Actions import RedispatchActions
+from .Actions import RedispatchActions, RedispatchSpecificActions
 
 class ExpertSystem(BaseAgent):
     def __init__(self, observation_space, action_space, tph_ptdf):
         super().__init__(action_space)
         self.tph_ptdf = tph_ptdf
         self.obs_space = observation_space
-        red_acts = RedispatchActions(observation_space, action_space)
+        red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0)
         self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
     
     def act(self, obs, reward, done):

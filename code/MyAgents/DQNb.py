@@ -2,7 +2,8 @@
 import os
 import numpy as np
 import pandas as pd
-from .Actions import RedispatchActions
+import matplotlib.pyplot as plt
+from .Actions import RedispatchActions, RedispatchSpecificActions
 from l2rpn_baselines.DoubleDuelingDQN import DoubleDuelingDQN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN_NN import DoubleDuelingDQN_NN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQNConfig import DoubleDuelingDQNConfig as cfg
@@ -22,13 +23,13 @@ class D3QN(DoubleDuelingDQN):
         self.batch_size = batch_size
         self.lr = lr
 
-        red_acts = RedispatchActions(observation_space, action_space)
+        red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0)
         self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
         print(self.redispatch_actions_dict)
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
         # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
-        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + 3
+        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = len(self.redispatch_actions_dict) #self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
 
@@ -45,19 +46,18 @@ class D3QN(DoubleDuelingDQN):
             self._init_training()
         
     def convert_obs(self, observation):
-        # v1: rho + prod_p + minutes + hour + day
-        # v2: rho + load_p + prod_p + minutes + hour + day
         res = []
 
         if True:
             # include powerflow observations
-            powerflow_limit = 1.6 # 200% of powerflow disconnects automatically the powerline
+            powerflow_limit = 1.1 # 200% of powerflow disconnects automatically the powerline
             max_val = powerflow_limit
             min_val = -powerflow_limit
             # new_val_x = min_new + (max_new - min_new) * (val_x - min_x) / (max_x - min_x)
             #pflow = -1 + 2 * (np.sign(observation.p_or) * observation.rho - min_val) / (max_val - min_val) 
             pflow = (np.sign(observation.p_or) * abs(observation.rho) - min_val) / (max_val - min_val) 
             res.append(pflow)
+            print(observation.rho)
         
         if False:
             # include load_p observations
@@ -68,7 +68,7 @@ class D3QN(DoubleDuelingDQN):
         
         if True:
             # include generation observations
-            gen = observation.prod_p / (observation.gen_pmax * 1.1) # 1.1 (bef 1.1) because prod_p seems to go beyond the maximum
+            gen = abs(observation.prod_p) / (observation.gen_pmax * 1.2) # 1.1 (bef 1.1) because prod_p seems to go beyond the maximum
             res.append(gen)
         
         if False:
@@ -78,14 +78,15 @@ class D3QN(DoubleDuelingDQN):
             actual_d = (observation.actual_dispatch - min_disp) / (max_disp - min_disp) #0.01 + (1 - 0.01) *
             res.append(actual_d[observation.gen_redispatchable])
 
-        if True:
+        if False:
             # include time (year not included, should work only on long term)
             res.append(np.array([observation.minute_of_hour / 60]))
-            res.append(np.array([observation.hour_of_day / 24]))
+            res.append(np.array([observation.hour_of_day / 23]))
             res.append(np.array([observation.day_of_week / 7]))
             #res.append(observation.month / 12)
         
-        return np.concatenate(res)
+        res = np.concatenate(res)
+        return res
 
     def convert_act(self, action):
         """
@@ -96,6 +97,182 @@ class D3QN(DoubleDuelingDQN):
         # 0: [(red_gen_id1, 0),(red_gen_id2, 0),(red_gen_id3, 0)]
         return self.action_space({"redispatch": self.redispatch_actions_dict[action]})
     
+    def my_act(self, state, reward, done=False):
+        # Register current state to stacking buffer
+        self._save_current_frame(state)
+        # We need at least num frames to predict
+        if len(self.frames) < self.num_frames:
+            action_selected = 0 # Do nothing
+        # Infer with the last num_frames states
+        else:
+            action_selected, _ = self.Qmain.predict_move(np.array(self.frames))
+        return action_selected
+    
+    ## Training Procedure
+    def train(self, env,
+              iterations,
+              save_path,
+              num_pre_training_steps=0,
+              logdir = "logs-train"):
+        # Make sure we can fill the experience buffer
+        if num_pre_training_steps < self.batch_size * self.num_frames:
+            num_pre_training_steps = self.batch_size * self.num_frames
+
+        # Loop vars
+        num_training_steps = iterations
+        num_steps = num_pre_training_steps + num_training_steps
+        step = 0
+        self.epsilon = cfg.INITIAL_EPSILON
+        alive_steps = 0
+        total_reward = 0
+        self.done = True
+
+        # Create file system related vars
+        logpath = os.path.join(logdir, self.name)
+        os.makedirs(save_path, exist_ok=True)
+        modelpath = os.path.join(save_path, self.name + ".h5")
+        self.tf_writer = tf.summary.create_file_writer(logpath, name=self.name)
+        self._save_hyperparameters(save_path, env, num_steps)
+
+        action_backup = np.zeros(num_steps) #### @felipe
+        qval_backup = np.zeros((num_steps, self.action_size)) #### @felipe
+        reward_backup = np.zeros(num_steps) #### @felipe
+        step_lasted = []
+
+        # Training loop
+        while step < num_steps:
+            # Init first time or new episode
+            if self.done:
+                new_obs = env.reset() # This shouldn't raise
+                self.reset(new_obs)
+            if cfg.VERBOSE and step % 1000 == 0:
+                print("Step [{}] -- Random [{}]".format(step, self.epsilon))
+
+            # Save current observation to stacking buffer
+            self._save_current_frame(self.state)
+
+            # Choose an action
+            if step <= num_pre_training_steps:
+                a = self.Qmain.random_move()
+            elif np.random.rand(1) < self.epsilon:
+                a = self.Qmain.random_move()
+            elif len(self.frames) < self.num_frames:
+                a = 0 # Do nothing
+            else:
+                a, q_actions = self.Qmain.predict_move(np.array(self.frames))
+                qval_backup[step] = q_actions #### @felipe
+                print(q_actions) #### @felipe
+                print("actSel: {}".format(a)) #### @felipe
+            action_backup[step] = a #### @felipe
+
+
+            # Convert it to a valid action
+            act = self.convert_act(a)
+            # Execute action
+            new_obs, reward, self.done, info = env.step(act)
+            reward_backup[step] = reward #### @felipe
+            new_state = self.convert_obs(new_obs)
+            if info["is_illegal"] or info["is_ambiguous"] or \
+               info["is_dispatching_illegal"] or info["is_illegal_reco"]:
+               pass ###############
+                #if cfg.VERBOSE: ############################
+                #    print (a, info) ###########################
+
+            # Save new observation to stacking buffer
+            self._save_next_frame(new_state)
+
+            # Save to experience buffer
+            if len(self.frames2) == self.num_frames:
+                self.per_buffer.add(np.array(self.frames),
+                                    a, reward,
+                                    np.array(self.frames2),
+                                    self.done)
+
+            # Perform training when we have enough experience in buffer
+            if step >= num_pre_training_steps:
+                training_step = step - num_pre_training_steps
+                # Decay chance of random action
+                self.epsilon = self._adaptive_epsilon_decay(training_step)
+
+                # Perform training at given frequency
+                if step % cfg.UPDATE_FREQ == 0 and \
+                   len(self.per_buffer) >= self.batch_size:
+                    # Perform training
+                    self._batch_train(training_step, step)
+
+                    if cfg.UPDATE_TARGET_SOFT_TAU > 0.0:
+                        tau = cfg.UPDATE_TARGET_SOFT_TAU
+                        # Update target network towards primary network
+                        self.Qmain.update_target_soft(self.Qtarget.model, tau)
+
+                # Every UPDATE_TARGET_HARD_FREQ trainings, update target completely
+                if cfg.UPDATE_TARGET_HARD_FREQ > 0 and \
+                   step % (cfg.UPDATE_FREQ * cfg.UPDATE_TARGET_HARD_FREQ) == 0:
+                    self.Qmain.update_target_hard(self.Qtarget.model)
+
+            total_reward += reward
+            if self.done:
+                self.epoch_rewards.append(total_reward)
+                self.epoch_alive.append(alive_steps)
+                step_lasted.append(alive_steps)
+                if cfg.VERBOSE:
+                    print("Survived [{}] steps".format(alive_steps))
+                    print("Total reward [{}]".format(total_reward))
+                alive_steps = 0
+                total_reward = 0
+            else:
+                alive_steps += 1
+            
+            # Save the network every 1000 iterations
+            if step > 0 and step % 1000 == 0:
+                self.save(modelpath)
+
+            # Iterate to next loop
+            step += 1
+            # Make new obs the current obs
+            self.obs = new_obs
+            self.state = new_state
+
+        # Save model after all steps
+        self.save(modelpath)
+        self._save_act_and_qval(action_backup, qval_backup, reward_backup, step_lasted, path_save=logdir) #### @felipe
+    
+    def _save_act_and_qval(self, actions, qvalues, rewards, step_lasted, path_save=None):
+        acts_df = pd.DataFrame(actions, columns=['action'])
+        qvals_df = pd.DataFrame(qvalues, columns=['Qv{}'.format(i) for i in range(qvalues.shape[1])])
+        rew_df = pd.DataFrame(rewards, columns=['reward'])
+        step_df = pd.DataFrame(step_lasted, columns=['steps'])
+
+        file_act = os.path.join(path_save, "actions.csv")
+        file_qval = os.path.join(path_save, "qvalues.csv")
+        file_rew = os.path.join(path_save, "rewards.csv")
+        file_steps = os.path.join(path_save, "rewards.csv")
+        acts_df.to_csv(file_act)
+        qvals_df.to_csv(file_qval)
+        rew_df.to_csv(file_rew)
+        step_df.to_csv(file_steps)
+
+        ax = acts_df.plot(kind='hist', bins=self.action_size) 
+        fig = ax.get_figure()
+        fig.savefig(os.path.join(path_save, 'actions_histogram'))
+
+        acts_df['index'] = acts_df.index
+        ax1 = acts_df.plot(kind='scatter', x='index', y='action', alpha=0.05, edgecolors='none')
+        fig1 = ax1.get_figure()
+        fig1.savefig(os.path.join(path_save, 'action_selection_evolution'), dpi=360)
+
+        ax2 = qvals_df.plot()
+        fig2 = ax2.get_figure()
+        fig2.savefig(os.path.join(path_save, 'qvalues_evolution'), dpi=360)
+
+        ax3 = rew_df.plot()
+        fig3 = ax3.get_figure()
+        fig3.savefig(os.path.join(path_save, 'reward_evolution'), dpi=360)   
+
+        ax4 = step_df.plot()
+        fig4 = ax4.get_figure()
+        fig4.savefig(os.path.join(path_save, 'max_steps_evolution'), dpi=360)      
+
     def export_summary(self, log_path):
         file_path = self._find_file_in(log_path)
         event_acc = EventAccumulator(file_path)

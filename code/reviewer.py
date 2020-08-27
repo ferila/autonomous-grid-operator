@@ -1,5 +1,6 @@
 import os
 import copy
+import shutil
 import imageio
 import numpy as np
 from cycler import cycler
@@ -17,6 +18,9 @@ class Reviewer(object):
     def __init__(self, path_save, analysis_path, agent_paths, name="default", short_names=[], notes=[]):
         # create analysis folder
         if not os.path.exists(analysis_path):
+            os.mkdir(analysis_path)
+        else:
+            shutil.rmtree(analysis_path)
             os.mkdir(analysis_path)
         self.analysis_path = analysis_path
         # create note explanation of what was analysed

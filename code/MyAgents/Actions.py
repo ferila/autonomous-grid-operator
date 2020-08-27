@@ -44,9 +44,9 @@ class RedispatchActions(object):
         If add here, change parameter self.ACTIONS_PER_GEN
         """
         if action_ix == 0:
-            return -self.obs_space.gen_max_ramp_down[gen_id]
-        elif action_ix == 1:
             return 0
+        elif action_ix == 1:
+            return -self.obs_space.gen_max_ramp_down[gen_id]
         elif action_ix == 2:
             return self.obs_space.gen_max_ramp_up[gen_id]
         else:
@@ -58,7 +58,7 @@ class RedispatchActions(object):
         gen_action_ixs contains action index for each generator.
         """
         limits = [self.ACTIONS_PER_GEN ** i for i in range(sum(self.obs_space.gen_redispatchable))]
-        # [1, 3, 9]
+        # [1, 3, 9] the g+1 changes for number of actions of g
         
         for ix, gen_lim in enumerate(limits):
             if (act_ix + 1) % gen_lim == 0:
@@ -68,3 +68,73 @@ class RedispatchActions(object):
                     gen_action_ixs[ix] += 1
 
         return gen_action_ixs
+
+
+class RedispatchSpecificActions(object):
+
+    def __init__(self, observation_space, action_space, acts_per_gen=3, max_setpoint_change=0, step_redispatch=5):
+        self.obs_space = observation_space
+        self.act_space = action_space
+        
+        # actions allowed per generator
+        self.step_redispatch = step_redispatch
+        
+        # change in the geneartion group setpoint
+        self.MAXIMUM_SETPOINT_CHANGE = max_setpoint_change
+        self.REDISPATCH_ACTIONS_DICT = self._build_redispatch_dict()
+
+    def _build_redispatch_dict(self):     
+        res_dict = {}
+        n_gen = self.obs_space.n_gen
+        gix_list = np.arange(n_gen)[self.obs_space.gen_redispatchable]
+        list_of_tup = self._create_combinations()
+        cont = 0
+        for c in list_of_tup:
+            if sum(c) == self.MAXIMUM_SETPOINT_CHANGE:
+                res_dict[cont] = list(zip(gix_list, c))
+                cont += 1
+        return res_dict
+
+    def _create_combinations(self):
+        tup_list = []
+        actions_per_gen = self._get_actions_per_generator()
+        for g_rs in actions_per_gen:
+            tup_list = self._add_to_tuple(tup_list, g_rs)
+        return tup_list
+    
+    def _get_actions_per_generator(self):
+        n_gen = self.obs_space.n_gen
+        redisp_gen = np.arange(n_gen)[self.obs_space.gen_redispatchable]
+        redisp_list = []
+        for gix in redisp_gen:
+            gen_redisp_list = self._create_generator_list(gix)
+            redisp_list.append(gen_redisp_list)
+        return redisp_list
+
+    def _create_generator_list(self, gen_ix):
+        md = -self.obs_space.gen_max_ramp_down[gen_ix]
+        mu = self.obs_space.gen_max_ramp_up[gen_ix]
+        ans = [0]
+        down_val = -self.step_redispatch
+        while down_val > md:
+            ans.append(down_val)
+            down_val -= self.step_redispatch
+        ans.append(md)
+        up_val = self.step_redispatch
+        while up_val < mu:
+            ans.append(up_val)
+            up_val += self.step_redispatch
+        ans.append(mu)
+        return ans
+
+    @staticmethod
+    def _add_to_tuple(tup_list, rs_list):
+        new_list = []
+        if not tup_list:
+            for j in rs_list:
+                new_list.append(tuple([j]))
+        else:
+            for i in tup_list:
+                for j in rs_list:
+                    new_list.append(i + tuple([j]))
+        return new_list
