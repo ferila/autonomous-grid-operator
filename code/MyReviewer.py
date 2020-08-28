@@ -125,7 +125,6 @@ class Reviewer(object):
                 self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
                 ## Zone balance
                 self._add_specific_topology_lines_plot(this_episode, case_ix=ix, folder=image_folder)
-                #self._add_specific_topology_generation_plot(this_episode, case_ix=ix, folder=image_folder)
 
         # Save common graphs
         fig.tight_layout()
@@ -246,28 +245,6 @@ class Reviewer(object):
         fig.tight_layout()
         fig.savefig(os.path.join(folder, "zone_flows"), dpi=self.resolution)
         plt.close(fig)
-
-    def _add_specific_topology_generation_plot(self, this_episode, case_ix=None, folder=None):
-        """
-        Plot 1:
-            - Net generation/consumption zone 1
-            - Generation zone 1
-        Plot 2:
-            - Powerflow line 17 (4-5)
-            - Powerflow line 16 (3-8) + 19 (6-8)
-            - Powerflow (cut) line 17 + 16 + 19
-        """
-
-        fig, ax = plt.subplots(3)
-        x = np.arange(this_episode.meta['nb_timestep_played'])
-
-        ax[0].set_title('Net power per zone - {}'.format(self.short_names[case_ix]))
-        ax[0].set_ylabel('Power [MW]')
-        ax[0].set_xlabel('Timesteps')
-
-        ax[1].set_title('Powerflow by lines and cut between zones - {}'.format(self.short_names[case_ix]))
-        ax[1].set_ylabel('Power [MW]')
-        ax[1].set_xlabel('Timesteps')
     
     def _add_plot_dispatch_and_redispatch(self, this_episode, case_ix=None, folder=None):
         """

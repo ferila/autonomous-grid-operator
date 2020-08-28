@@ -8,7 +8,7 @@ from Heuristic import TopologyPTDF
 from grid2op.Reward import L2RPNReward, RedispReward
 from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward
 from grid2op.Agent import DoNothingAgent
-from MyAgents.DQNb import D3QN, D3QNH
+from MyAgents.DQNb import D3QN
 from MyAgents.ExpertSystem import ExpertSystem
 #from l2rpn_baselines.DoubleDuelingDQN import train as DDDQN_train
 
@@ -29,14 +29,15 @@ if __name__ == "__main__":
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp" # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
         environ = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
         # notes for each agent case and its version
-        notes = {
-            'fr4': "In this version:\n\
+        vnotes = {
+            'test': "In this version:\n\
+                Normal.\n\
                 Hyperparams: num_frames 4. \n\
                 Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step of 5MW for each generator.\n\
                 Observations: only rho and prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)"
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version, reward_to_use in [("D3QN", 'fr4', DiReward)]: #"DoNothing" "ExpertSystem" "D3QN"
+        for case_name, version, reward_to_use in [("D3QN", 'test', L2RPNReward)]: #"DoNothing" "ExpertSystem" "D3QN"
             case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
@@ -44,7 +45,7 @@ if __name__ == "__main__":
             else:
                 raise Exception('Folder already exists')
             with open(os.path.join(path_save, "NOTES.txt"), "w") as f:
-                f.write("{}\n".format(notes[version]))
+                f.write("{}\n".format(vnotes[version]))
 
             start_time = time.time()
             print("-------------{}--------------".format(case_name))
@@ -60,20 +61,7 @@ if __name__ == "__main__":
                 tp = TopologyPTDF(env=env, path=path_save)
                 agent = ExpertSystem(env.observation_space, env.action_space, tp)
             elif case_name == "D3QN_H":
-                tp = TopologyPTDF(env=env, path=path_save)
-                agent_name = "{}_ddqn".format(case_name)
-                agent_nn_path = os.path.join(path_save, "{}.h5".format(agent_name))
-                if not os.path.exists(agent_nn_path):
-                    log_path = os.path.join(path_save, "tf_logs_DDDQN")
-                    if not os.path.exists(log_path):
-                        os.mkdir(log_path)
-                    #DEFAULT VALUES: num_frames=4, batch_size=32, lr=1e-5
-                    agent = D3QNH(env.observation_space, env.action_space, tph_ptdf=tp, name=agent_name, is_training=True)
-                    agent.train(env, train_iter, path_save, logdir=log_path)
-                    agent.export_summary(log_path=os.path.join(log_path, agent_name))
-                else:
-                    agent = D3QNH(env.observation_space, env.action_space, tph_ptdf=tp)
-                    agent.load(agent_nn_path)
+                pass
             elif case_name == "D3QN":
                 agent_name = "{}_ddqn".format(case_name)
                 agent_nn_path = os.path.join(path_save, "{}.h5".format(agent_name))
@@ -109,7 +97,7 @@ if __name__ == "__main__":
                 analysis_folder_name = "agent_analysis"
                 ag_paths = [case]
                 short_names = [case_name]
-                notes = [notes[version]]
+                notes = [vnotes[version]]
                 selected_episodes = ["0002", "0003", "0007", "0017", "0018"]
 
                 run_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'

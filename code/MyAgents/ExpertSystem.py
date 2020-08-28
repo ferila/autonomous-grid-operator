@@ -98,7 +98,7 @@ class MyFirstAgent(BaseAgent):
         # act only if flows are over its limits
         if np.sum(obs.rho > 1):
             line_ix = np.argmax(obs.rho)
-            evaluations, (best_gen, direction) = self._analyse_dispatch_options(obs, line_ix)
+            _, (best_gen, direction) = self._analyse_dispatch_options(obs, line_ix)
             # print("evauluations: \n{}".format(evaluations))
             # print("best gen {} (sub {}), direction: {}".format(best_gen, obs.gen_to_subid[best_gen], direction))
             if direction == 0:
@@ -120,9 +120,9 @@ class MyFirstAgent(BaseAgent):
         current_net_gen_sub = self._gen_by_sub(obs)
         ptdf_current_flow = ptdf_matrix.loc[line_ix, :].dot(current_net_gen_sub)
         
-        current_flow = obs.p_or[line_ix] #+ ptdf_matrix.loc[line_ix, :].dot(current_net_gen_sub)
-        from_sub = obs.line_or_to_subid[line_ix]
-        to_sub = obs.line_ex_to_subid[line_ix]
+        #current_flow = obs.p_or[line_ix] #+ ptdf_matrix.loc[line_ix, :].dot(current_net_gen_sub)
+        #from_sub = obs.line_or_to_subid[line_ix]
+        #to_sub = obs.line_ex_to_subid[line_ix]
         # print("---current flow line {} ({}->{}): {}".format(line_ix, from_sub, to_sub, current_flow))
         # print("---compared to ptdf: {}".format(ptdf_current_flow))
 
