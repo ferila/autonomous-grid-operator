@@ -140,6 +140,10 @@ class D3QN(DoubleDuelingDQN):
         qval_backup[:] = np.nan #### @felipe
         reward_backup = np.zeros(num_steps) #### @felipe
         step_lasted = [] #### @felipe
+        loss_backup = np.zeros(num_steps) #### @felipe
+        loss_backup[:] = np.nan #### @felipe
+        lr_backup = np.zeros(num_steps) #### @felipe
+        lr_backup[:] = np.nan #### @felipe
 
         # Training loop
         while step < num_steps:
@@ -199,7 +203,9 @@ class D3QN(DoubleDuelingDQN):
                 if step % cfg.UPDATE_FREQ == 0 and \
                    len(self.per_buffer) >= self.batch_size:
                     # Perform training
-                    self._batch_train(training_step, step)
+                    loss, lrb = self._batch_train(training_step, step) #### @felipe
+                    loss_backup[step] = loss #### @felipe
+                    lr_backup[step] = lrb #### @felipe
 
                     if cfg.UPDATE_TARGET_SOFT_TAU > 0.0:
                         tau = cfg.UPDATE_TARGET_SOFT_TAU
@@ -236,20 +242,108 @@ class D3QN(DoubleDuelingDQN):
 
         # Save model after all steps
         self.save(modelpath)
-        self._save_act_and_qval(action_backup, qaction_backup, qval_backup, reward_backup, step_lasted, path_save=logdir) #### @felipe
+        self._save_act_and_qval(loss_backup, lr_backup, action_backup, qaction_backup, qval_backup, reward_backup, step_lasted, path_save=logdir) #### @felipe
     
-    def _save_act_and_qval(self, actions, qactions, qvalues, rewards, step_lasted, path_save=None):
+    def _batch_train(self, training_step, step):
+        """Trains network to fit given parameters"""
+
+        # Sample from experience buffer
+        sample_batch = self.per_buffer.sample(self.batch_size, cfg.PER_BETA)
+        s_batch = sample_batch[0]
+        a_batch = sample_batch[1]
+        r_batch = sample_batch[2]
+        s2_batch = sample_batch[3]
+        d_batch = sample_batch[4]
+        w_batch = sample_batch[5]
+        idx_batch = sample_batch[6]
+
+        Q = np.zeros((self.batch_size, self.action_size))
+
+        # Reshape frames to 1D
+        input_size = self.observation_size * self.num_frames
+        input_t = np.reshape(s_batch, (self.batch_size, input_size))
+        input_t_1 = np.reshape(s2_batch, (self.batch_size, input_size))
+
+        # Save the graph just the first time
+        if training_step == 0:
+            tf.summary.trace_on()
+
+        # T Batch predict
+        Q = self.Qmain.model.predict(input_t, batch_size = self.batch_size)
+
+        ## Log graph once and disable graph logging
+        if training_step == 0:
+            with self.tf_writer.as_default():
+                tf.summary.trace_export(self.name + "-graph", step)
+
+        # T+1 batch predict
+        Q1 = self.Qmain.model.predict(input_t_1, batch_size=self.batch_size)
+        Q2 = self.Qtarget.model.predict(input_t_1, batch_size=self.batch_size)
+
+        # Compute batch Qtarget using Double DQN
+        for i in range(self.batch_size):
+            doubleQ = Q2[i, np.argmax(Q1[i])]
+            Q[i, a_batch[i]] = r_batch[i]
+            if d_batch[i] == False:
+                Q[i, a_batch[i]] += cfg.DISCOUNT_FACTOR * doubleQ
+
+        # Batch train
+        loss = self.Qmain.train_on_batch(input_t, Q, w_batch)
+
+        # Update PER buffer
+        priorities = self.Qmain.batch_sq_error
+        # Can't be zero, no upper limit
+        priorities = np.clip(priorities, a_min=1e-8, a_max=None)
+        self.per_buffer.update_priorities(idx_batch, priorities)
+
+        # Log some useful metrics every even updates
+        if step % (cfg.UPDATE_FREQ * 2) == 0:
+            with self.tf_writer.as_default():
+                mean_reward = np.mean(self.epoch_rewards)
+                mean_alive = np.mean(self.epoch_alive)
+                if len(self.epoch_rewards) >= 100:
+                    mean_reward_100 = np.mean(self.epoch_rewards[-100:])
+                    mean_alive_100 = np.mean(self.epoch_alive[-100:])
+                else:
+                    mean_reward_100 = mean_reward
+                    mean_alive_100 = mean_alive
+                tf.summary.scalar("mean_reward", mean_reward, step)
+                tf.summary.scalar("mean_alive", mean_alive, step)
+                tf.summary.scalar("mean_reward_100", mean_reward_100, step)
+                tf.summary.scalar("mean_alive_100", mean_alive_100, step)
+                tf.summary.scalar("loss", loss, step)
+                tf.summary.scalar("lr", self.Qmain.train_lr, step)
+            if cfg.VERBOSE:
+                print("loss =", loss)
+        
+        return loss, self.Qmain.train_lr
+
+    def _save_act_and_qval(self, loss, lr, actions, qactions, qvalues, rewards, step_lasted, path_save=None):
+        loss_df = pd.DataFrame(loss, columns=['loss'])
+        loss_df = loss_df.fillna(method='ffill')
+        lr_df = pd.DataFrame(lr, columns=['lr'])
+        lr_df = lr_df.fillna(method='ffill')
         acts_df = pd.DataFrame(actions, columns=['action'])
         qacts_df = pd.DataFrame(qactions, columns=['action'])
         qvals_df = pd.DataFrame(qvalues, columns=['Qv{}'.format(i) for i in range(qvalues.shape[1])])
         rew_df = pd.DataFrame(rewards, columns=['reward'])
         step_df = pd.DataFrame(step_lasted, columns=['steps'])
 
+        loss_df.to_csv(os.path.join(path_save, "loss.csv"))
+        lr_df.to_csv(os.path.join(path_save, "learning_rate.csv"))
         acts_df.to_csv(os.path.join(path_save, "actions.csv"))
         qacts_df.to_csv(os.path.join(path_save, "qactions.csv"))
         qvals_df.to_csv(os.path.join(path_save, "qvalues.csv"))
         rew_df.to_csv(os.path.join(path_save, "rewards.csv"))
         step_df.to_csv(os.path.join(path_save, "steps.csv"))
+
+        # loss and lr
+        ax = loss_df.plot()
+        fig = ax.get_figure()
+        fig.savefig(os.path.join(path_save, '_loss_evolution'), dpi=360)
+        ax = lr_df.plot()
+        fig = ax.get_figure()
+        fig.savefig(os.path.join(path_save, '_lr_evolution'), dpi=360)
 
         # all actions histogram
         ax = acts_df.plot(kind='hist', bins=self.action_size) 

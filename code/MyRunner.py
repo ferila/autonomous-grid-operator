@@ -1,3 +1,4 @@
+import os
 import time
 import numpy as np
 from grid2op.Runner import Runner
@@ -110,7 +111,11 @@ class MyRunner(Runner):
                 episode.incr_store(efficient_storing, time_step, end__ - beg__,
                                    float(reward), env.env_modification, act, obs, info)
             end_ = time.time()
-            print(info) ##### @felipe
+
+            with open(os.path.join(path_save, 'infoEpisodes.txt'), 'a') as f: ##### @felipe
+                f.write("--- Episode {} ---\n".format(indx)) ##### @felipe
+                f.write("{}\n".format(str(info))) ##### @felipe
+
         episode.set_meta(env, time_step, float(cum_reward), seed)
 
         li_text = ["Env: {:.2f}s", "\t - apply act {:.2f}s", "\t - run pf: {:.2f}s",

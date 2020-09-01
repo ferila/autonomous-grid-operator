@@ -6,7 +6,7 @@ from MyRunner import MyRunner
 from MyReviewer import Reviewer
 from Heuristic import TopologyPTDF
 from grid2op.Reward import L2RPNReward, RedispReward
-from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward
+from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward, Di2Reward, Di3Reward, CDi3Reward, C2Di3Reward
 from grid2op.Agent import DoNothingAgent
 from MyAgents.DQNb import D3QN
 from MyAgents.ExpertSystem import ExpertSystem
@@ -24,20 +24,25 @@ from MyAgents.ExpertSystem import ExpertSystem
 
 if __name__ == "__main__":
     #reward_to_use = DiReward #GameplayReward in "l2rpn_wcci_2020"
-    train_iter = 25000
-    NUM_FRAMES = 4
+    train_iter = 35000
+    NUM_FRAMES = 3
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp" # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
         environ = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
         # notes for each agent case and its version
         vnotes = {
-            'test': "In this version:\n\
-                Normal.\n\
-                Hyperparams: num_frames 4. \n\
+            'defaultC': "In this version:\n\
+                Reward: continuous values, no action cost, no is_illegal, min_rew (-50), ovf threshold 0.95, overflow (-30), over/under generation cost (-10), target_dispatch distance (-10).\n\
+                Hyperparams: num_frames 3, 35k it. \n\
                 Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step of 5MW for each generator.\n\
-                Observations: only rho and prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)"
+                Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)",
+            'defaultC2': "In this version:\n\
+                Reward: continuous values, no action cost, no is_illegal, min_rew (-50), ovf threshold 0.95, overflow (-20), target_dispatch distance (-10).\n\
+                Hyperparams: num_frames 3, 35k it. \n\
+                Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step of 5MW for each generator.\n\
+                Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)",
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version, reward_to_use in [("D3QN", 'test', L2RPNReward)]: #"DoNothing" "ExpertSystem" "D3QN"
+        for case_name, version, reward_to_use in [("D3QN", 'defaultC2', C2Di3Reward), ("D3QN", 'defaultC', CDi3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
             case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):

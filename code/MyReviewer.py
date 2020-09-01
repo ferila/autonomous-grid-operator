@@ -103,9 +103,6 @@ class Reviewer(object):
                 
         for ix, c in enumerate(cases):
             this_episode = EpisodeData.from_disk(c, episode_studied)
-            image_folder = os.path.join(self.analysis_path, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
-            if not os.path.exists(image_folder):
-                os.mkdir(image_folder)
 
             # Common graphs
             ## Rewards and disconnected lines
@@ -114,6 +111,9 @@ class Reviewer(object):
             self._add_plot_generations_and_load(this_episode, axs2, subplot_ix=ix)
 
             if self.self_analysis:
+                image_folder = os.path.join(self.analysis_path, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
+                if not os.path.exists(image_folder):
+                    os.mkdir(image_folder)
                 # Case specific graphs
                 ## Last frames grid images and animated gif
                 self._save_grid_images(this_episode, last_frames=last_frames, folder=image_folder)

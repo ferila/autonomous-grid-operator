@@ -4,6 +4,183 @@ from grid2op.Exceptions import Grid2OpException
 from grid2op.Reward.BaseReward import BaseReward
 from grid2op.dtypes import dt_float
 
+class C2Di3Reward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0.95)
+        #self.reward_min = dt_float(-10*env.n_line - 10*env.n_gen)
+        self.reward_min = dt_float(-50)
+        self.reward_max = dt_float(0.0)
+        self.safety_redispatch_fct = 0.95
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        #if has_error or is_illegal or is_ambiguous:
+        #    return dt_float(-20)
+        #else:
+        # overflow lower than is_illegal
+        #ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+        #thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+        #amp_ov = np.abs(ampere_flows - self.overflow_threshold*thermal_limits)
+        
+        relative_flow = np.abs(env.backend.get_relative_flow(), dtype=dt_float)
+        over_flow = (relative_flow - self.overflow_threshold)
+        ovf_cost = dt_float(-20*np.sum(over_flow[over_flow > 0]))
+
+        # generator punishment for taget_dispatch going beyond limits
+        target_dispatch = env.get_obs().target_dispatch
+        pmax = np.abs(env.gen_pmax, dtype=dt_float)
+        pmin = np.abs(env.gen_pmin, dtype=dt_float)
+        up_limit = target_dispatch/(pmax - pmin) - self.safety_redispatch_fct
+        down_limit = target_dispatch/(pmax - pmin) + self.safety_redispatch_fct
+        over_redisp_cost = dt_float(-10*np.sum(np.abs(up_limit[up_limit > 0])))
+        under_redisp_cost = dt_float(-10*np.sum(np.abs(down_limit[down_limit < 0])))
+
+        # innecesary action (not donothing) better than is_illegal but worst than donothing
+        # do_nothing reward 0 (it is preferable doing something than do not avoid overflows)
+        #if action.as_dict():
+        #    action_cost = dt_float(-5.0)
+        #else:
+        #    action_cost = dt_float(0.0)
+
+        return ovf_cost + over_redisp_cost + under_redisp_cost #+ action_cost
+
+class CDi3Reward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0.95)
+        self.reward_min = dt_float(-50)
+        self.reward_max = dt_float(0.0)
+        self.safety_redispatch_fct = 0.95
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        #if has_error or is_illegal or is_ambiguous:
+        #    return dt_float(-20)
+        #else:
+        # overflow lower than is_illegal
+        #ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+        #thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+        #amp_ov = np.abs(ampere_flows - self.overflow_threshold*thermal_limits)
+        
+        relative_flow = np.abs(env.backend.get_relative_flow(), dtype=dt_float)
+        over_flow = (relative_flow - self.overflow_threshold)
+        ovf_cost = dt_float(-30*np.sum(over_flow[over_flow > 0]))
+
+        # generator punishment for taget_dispatch going beyond limits
+        target_dispatch = env.get_obs().target_dispatch
+        pmax = np.abs(env.gen_pmax, dtype=dt_float)
+        pmin = np.abs(env.gen_pmin, dtype=dt_float)
+        up_limit = target_dispatch/(pmax - pmin) - self.safety_redispatch_fct
+        down_limit = target_dispatch/(pmax - pmin) + self.safety_redispatch_fct
+        over_redisp_cost = dt_float(-10*np.sum(np.abs(up_limit[up_limit > 0])))
+        under_redisp_cost = dt_float(-10*np.sum(np.abs(down_limit[down_limit < 0])))
+
+        # generator punishment for going beyond pmax
+        prod_p, _, _ = env.backend.generators_info()
+        up_gen = np.divide(prod_p, pmax, out=np.zeros_like(prod_p), where=pmax!=0) - 1
+        down_gen = np.divide(pmin, prod_p, out=np.zeros_like(pmin), where=prod_p!=0) - 1
+        over_prod_cost = dt_float(-10*np.sum(up_gen[up_gen > 0]))
+        under_prod_cost = dt_float(-10*np.sum(down_gen[down_gen > 0]))
+
+        # innecesary action (not donothing) better than is_illegal but worst than donothing
+        # do_nothing reward 0 (it is preferable doing something than do not avoid overflows)
+        #if action.as_dict():
+        #    action_cost = dt_float(-5.0)
+        #else:
+        #    action_cost = dt_float(0.0)
+
+        return ovf_cost + over_prod_cost + under_prod_cost + over_redisp_cost + under_redisp_cost #+ action_cost
+
+class Di3Reward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0.92)
+        self.reward_min = dt_float(-20.0*env.n_line - 10*env.n_gen - 10*env.n_gen)
+        self.reward_max = dt_float(0.0)
+        self.safety_redispatch_fct = 0.95
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        if has_error or is_illegal or is_ambiguous:
+            return dt_float(-20)
+        else:
+            # overflow lower than is_illegal
+            #ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+            #thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+            #relative_flow = np.divide(ampere_flows, thermal_limits, dtype=dt_float)
+            relative_flow = np.abs(env.backend.get_relative_flow(), dtype=dt_float)
+            over_flow = (relative_flow - self.overflow_threshold)
+            ovf_cost = dt_float(-50*np.sum(over_flow > 0))
+
+            # generator punishment for taget_dispatch going beyond limits
+            target_dispatch = env.get_obs().target_dispatch
+            pmax = np.abs(env.gen_pmax, dtype=dt_float)
+            pmin = np.abs(env.gen_pmin, dtype=dt_float)
+            over_redisp_cost = dt_float(-10*np.sum((target_dispatch - self.safety_redispatch_fct*(pmax - pmin)) > 0))
+            under_redisp_cost = dt_float(-10*np.sum((target_dispatch + self.safety_redispatch_fct*(pmax - pmin)) < 0))
+
+            # generator punishment for going beyond pmax
+            prod_p, _, _ = env.backend.generators_info()
+            over_prod_cost = dt_float(-10*np.sum((prod_p - pmax) > 0))
+            under_prod_cost = dt_float(-10*np.sum((pmin - prod_p) > 0))
+
+            # innecesary action (not donothing) better than is_illegal but worst than donothing
+            # do_nothing reward 0 (it is preferable doing something than do not avoid overflows)
+            #if action.as_dict():
+            #    action_cost = dt_float(-5.0)
+            #else:
+            #    action_cost = dt_float(0.0)
+
+            return ovf_cost + over_prod_cost + under_prod_cost + over_redisp_cost + under_redisp_cost #+ action_cost
+
+class Di2Reward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0.95)
+        self.reward_min = dt_float(-20.0*env.n_line - 10*env.n_gen - 5.0)
+        self.reward_max = dt_float(0.0)
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        if has_error or is_illegal or is_ambiguous:
+            return dt_float(-10)
+        else:
+            # overflow lower than is_illegal
+            ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+            thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+            relative_flow = np.divide(ampere_flows, thermal_limits, dtype=dt_float)
+            over_flow = (relative_flow - self.overflow_threshold)
+            ovf_cost = dt_float(-20*np.sum(over_flow > 0))
+
+            # generator punishment for going beyond pmax
+            prod_p, _, _ = env.backend.generators_info()
+            pmax = np.abs(env.gen_pmax, dtype=dt_float)
+            pmin = np.abs(env.gen_pmin, dtype=dt_float)
+            over_prod_cost = dt_float(-10*np.sum((prod_p - pmax) > 0))
+            under_prod_cost = dt_float(-10*np.sum((pmin - prod_p) > 0))
+
+            # innecesary action (not donothing) better than is_illegal but worst than donothing
+            # do_nothing reward 0 (it is preferable doing something than do not avoid overflows)
+            #if action.as_dict():
+            #    action_cost = dt_float(-5.0)
+            #else:
+            #    action_cost = dt_float(0.0)
+
+            return ovf_cost + over_prod_cost + under_prod_cost #+ action_cost
+
 class FoolReward(BaseReward):
 
     def __init__(self):
@@ -44,17 +221,11 @@ class DiReward(BaseReward):
             # innecesary action (not donothing) better than is_illegal but worst than donothing
             # do_nothing reward 0 (it is preferable doing something than do not avoid overflows)
             if action.as_dict():
-                action_cost = dt_float(-1.0)
+                action_cost = dt_float(-5.0)
             else:
                 action_cost = dt_float(0.0)
 
-            ans = ovf_cost + action_cost
-            if ans < -200:
-                print("super negative reward: {}".format(ans))
-                print(action.as_dict())
-                print(env.backend.get_relative_flow())
-
-            return ans
+            return ovf_cost + action_cost
 
 class OvdiReward(BaseReward):
     """
