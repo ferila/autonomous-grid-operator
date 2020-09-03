@@ -4,6 +4,8 @@ from grid2op.Exceptions import Grid2OpException
 from grid2op.Reward.BaseReward import BaseReward
 from grid2op.dtypes import dt_float
 
+# env.gen_cost_per_MW
+
 class C2Di3Reward(BaseReward):
 
     def __init__(self):
@@ -11,11 +13,11 @@ class C2Di3Reward(BaseReward):
     
     def initialize(self, env):
         # overflow threshold to act
-        self.overflow_threshold = dt_float(0.95)
+        self.overflow_threshold = dt_float(0.9)
+        self.safety_redispatch_fct = dt_float(0.95)
         #self.reward_min = dt_float(-10*env.n_line - 10*env.n_gen)
-        self.reward_min = dt_float(-50)
+        self.reward_min = dt_float(-20)
         self.reward_max = dt_float(0.0)
-        self.safety_redispatch_fct = 0.95
 
     def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
         #if has_error or is_illegal or is_ambiguous:
@@ -150,7 +152,7 @@ class Di2Reward(BaseReward):
     
     def initialize(self, env):
         # overflow threshold to act
-        self.overflow_threshold = dt_float(0.95)
+        self.overflow_threshold = dt_float(0.8)
         self.reward_min = dt_float(-20.0*env.n_line - 10*env.n_gen - 5.0)
         self.reward_max = dt_float(0.0)
 

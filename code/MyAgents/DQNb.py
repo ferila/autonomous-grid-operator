@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from .Actions import RedispatchActions, RedispatchSpecificActions
+from .Actions import RedispatchActions, RedispatchSpecificActions, RedispatchActionFactory
 from l2rpn_baselines.DoubleDuelingDQN import DoubleDuelingDQN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQN_NN import DoubleDuelingDQN_NN
 from l2rpn_baselines.DoubleDuelingDQN.DoubleDuelingDQNConfig import DoubleDuelingDQNConfig as cfg
@@ -13,7 +13,7 @@ from tensorboard.backend.event_processing.event_accumulator import EventAccumula
 
 class D3QN(DoubleDuelingDQN):
 
-    def __init__(self, observation_space, action_space, name=__name__, is_training=False, num_frames=4, batch_size=32, lr=1e-5):
+    def __init__(self, observation_space, action_space, name=__name__, is_training=False, num_frames=4, batch_size=32, lr=1e-5, control_gen=[]):
         super().__init__(observation_space,
                         action_space,
                         name=name,
@@ -25,6 +25,8 @@ class D3QN(DoubleDuelingDQN):
 
         red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0)
         self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
+        #red_acts = RedispatchActionFactory(observation_space, controllable_generators=control_gen, maximum_ramp_gap=2)
+        #self.redispatch_actions_dict = red_acts.redispatch_actions_dict
         print(self.redispatch_actions_dict)
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
@@ -341,46 +343,55 @@ class D3QN(DoubleDuelingDQN):
         ax = loss_df.plot()
         fig = ax.get_figure()
         fig.savefig(os.path.join(path_save, '_loss_evolution'), dpi=360)
+        plt.close(fig)
         ax = lr_df.plot()
         fig = ax.get_figure()
         fig.savefig(os.path.join(path_save, '_lr_evolution'), dpi=360)
+        plt.close(fig)
 
         # all actions histogram
         ax = acts_df.plot(kind='hist', bins=self.action_size) 
         fig = ax.get_figure()
         fig.savefig(os.path.join(path_save, '_actions_histogram'))
+        plt.close(fig)
 
         # all actions evolution
         acts_df['index'] = acts_df.index
         ax1 = acts_df.plot(kind='scatter', x='index', y='action', alpha=0.05, edgecolors='none')
         fig1 = ax1.get_figure()
         fig1.savefig(os.path.join(path_save, '_action_selection_evolution'), dpi=360)
+        plt.close(fig1)
 
         # q-actions histogram
         ax = qacts_df.plot(kind='hist', bins=self.action_size) 
         fig = ax.get_figure()
         fig.savefig(os.path.join(path_save, '_qactions_histogram'))
+        plt.close(fig)
 
         # q-actions evolution
         qacts_df['index'] = qacts_df.index
         ax1 = qacts_df.plot(kind='scatter', x='index', y='action', alpha=0.05, edgecolors='none')
         fig1 = ax1.get_figure()
         fig1.savefig(os.path.join(path_save, '_qaction_selection_evolution'), dpi=360)
+        plt.close(fig1)
 
         # q-values evolution
         ax2 = qvals_df.plot()
         fig2 = ax2.get_figure()
         fig2.savefig(os.path.join(path_save, '_qvalues_evolution'), dpi=360)
+        plt.close(fig2)
 
         # reward evolution
         ax3 = rew_df.plot()
         fig3 = ax3.get_figure()
         fig3.savefig(os.path.join(path_save, '_reward_evolution'), dpi=360)   
+        plt.close(fig3)
 
         # max steps reached evolution
         ax4 = step_df.plot()
         fig4 = ax4.get_figure()
         fig4.savefig(os.path.join(path_save, '_max_steps_evolution'), dpi=360)      
+        plt.close(fig4)
 
     def export_summary(self, log_path):
         file_path = self._find_file_in(log_path)

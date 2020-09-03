@@ -3,6 +3,7 @@ import copy
 import shutil
 import imageio
 import numpy as np
+import pandas as pd
 from cycler import cycler
 import matplotlib as mpl
 from matplotlib import cm
@@ -45,7 +46,7 @@ class Reviewer(object):
         cases = [os.path.join(self.path_save, p) for p in self.agent_paths if p not in avoid_agents]
         res_case = {}
         for c in cases:
-            episodes = [ep for ep in os.listdir(c) if os.path.isdir(os.path.join(c, ep)) and not ep.startswith('tf_logs') and not ep.startswith('_STDY')]
+            episodes = [ep for ep in os.listdir(c) if os.path.isdir(os.path.join(c, ep)) and ep.startswith('00')]
             res_case[c] = {'ep': [],'tot_plays': [], 'max_plays': [], 'cum_reward': []}
             for ep in episodes:
                 this_episode = EpisodeData.from_disk(c, ep)
@@ -125,6 +126,8 @@ class Reviewer(object):
                 self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
                 ## Zone balance
                 self._add_specific_topology_lines_plot(this_episode, case_ix=ix, folder=image_folder)
+                ## Overflow and actual_dispatch
+                self._add_overflow_dispatch_plot(this_episode, case_ix=ix, folder=image_folder)
 
         # Save common graphs
         fig.tight_layout()
@@ -184,6 +187,38 @@ class Reviewer(object):
     
         ax[subplot_ix,0].legend(disp)
 
+    
+    def _add_overflow_dispatch_plot(self, this_episode, case_ix=None, folder=None):
+        fig, (a0, a1) = plt.subplots(2, 1, gridspec_kw={'width_ratios': [1], 'height_ratios': [2,1]})
+        
+        a0.set_title("Overflows - {}".format(self.short_names[case_ix]))
+        a0.set_ylabel("Lines", fontsize=self.fontsize)
+
+        a1.set_title("Redispatch - {}".format(self.short_names[case_ix]))
+        a1.set_ylabel("Power [MW]", fontsize=self.fontsize)
+
+        obs = copy.deepcopy(this_episode.observations)
+        acts = copy.deepcopy(this_episode.actions)
+        plays = this_episode.meta['nb_timestep_played']
+        # actual_d = self._get_all_values(obs, 'actual_dispatch')
+        redisp_act = self._get_all_action_values(acts, 'redispatch', n_gen=obs[-1].n_gen)
+        rho = self._get_all_values(obs, 'rho')
+        disp_available = obs[-1].gen_redispatchable
+        disp = np.arange(obs[-1].n_gen)[disp_available]
+
+        x = np.arange(plays)
+        normalize = mpl.colors.Normalize(vmin=-0, vmax=1.3)
+        for lix in range(rho.shape[1]):
+            a0.scatter(x, [obs[-1].name_line[lix] for i in range(plays)], c=rho[:, lix], cmap=cm.Reds, norm=normalize, alpha=self.alpha)
+        
+        colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
+        a1.set_prop_cycle(cycler('color', colors))
+        a1.plot(x, redisp_act[:,disp_available], alpha=self.alpha)
+        a1.legend()
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(folder, "overflow_dispatch"), dpi=self.resolution)
+        plt.close(fig)
     
     def _add_specific_topology_lines_plot(self, this_episode, case_ix=None, folder=None):
         """

@@ -10,6 +10,7 @@ from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward, Di
 from grid2op.Agent import DoNothingAgent
 from MyAgents.DQNb import D3QN
 from MyAgents.ExpertSystem import ExpertSystem
+from grid2op.Parameters import Parameters
 #from l2rpn_baselines.DoubleDuelingDQN import train as DDDQN_train
 
 # tZero: normal (powerflow (0,1) without load)
@@ -26,23 +27,32 @@ if __name__ == "__main__":
     #reward_to_use = DiReward #GameplayReward in "l2rpn_wcci_2020"
     train_iter = 35000
     NUM_FRAMES = 3
+    controllable_generators = [0,1,5] # must be sorted increasingly
+    custom_params = Parameters()
+    custom_params.ENV_DC = True
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp" # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
         environ = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
         # notes for each agent case and its version
         vnotes = {
-            'defaultC': "In this version:\n\
-                Reward: continuous values, no action cost, no is_illegal, min_rew (-50), ovf threshold 0.95, overflow (-30), over/under generation cost (-10), target_dispatch distance (-10).\n\
+            'c2di3': "In this version:\n\
+                Reward: continuous values, no action cost, no is_illegal, min_rew (-20), ovf threshold 0.9, safety_redisp 0.95, overflow (-20), target_dispatch distance (-10).\n\
                 Hyperparams: num_frames 3, 35k it. \n\
-                Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step of 5MW for each generator.\n\
+                Actions: RedispatchActionFactory. control_gen=[5].\n\
                 Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)",
-            'defaultC2': "In this version:\n\
-                Reward: continuous values, no action cost, no is_illegal, min_rew (-50), ovf threshold 0.95, overflow (-20), target_dispatch distance (-10).\n\
+            'di2': "In this version:\n\
+                Reward: continuous values, no action cost, no is_illegal, min_rew (-10), ovf threshold 0.95, overflow (-20), generation limits (-10).\n\
                 Hyperparams: num_frames 3, 35k it. \n\
-                Actions: index 0 is DoNothing, reduced actions, setpoint change 0, step of 5MW for each generator.\n\
+                Actions: RedispatchActionFactory. control_gen=[5].\n\
                 Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)",
+            'DC_ovf0.8': "In this version:\n\
+                env: DC mode. \n\
+                Reward: continuous values, no action cost, no is_illegal, min_rew (-10), ovf threshold 0.8, overflow (-20), generation limits (-10).\n\
+                Hyperparams: num_frames 3, 35k it. \n\
+                Actions: controlling 3 generators. Balanced..\n\
+                Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)"
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version, reward_to_use in [("D3QN", 'defaultC2', C2Di3Reward), ("D3QN", 'defaultC', CDi3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
+        for case_name, version, reward_to_use in [("D3QN", 'DC_ovf0.8', Di2Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
             case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
@@ -56,7 +66,8 @@ if __name__ == "__main__":
             print("-------------{}--------------".format(case_name))
             print("start time: {}".format(start_time))
             env_name = env_case_name
-            env = grid2op.make(env_name, reward_class=reward_to_use) 
+            env = grid2op.make(env_name, reward_class=reward_to_use, param=custom_params)
+            print(env.parameters.to_dict())
             # env = grid2op.make(reward_class=L2RPNReward, other_rewards={"other_reward": FlatReward})
 
             # choose your agent
@@ -75,7 +86,7 @@ if __name__ == "__main__":
                     if not os.path.exists(log_path):
                         os.mkdir(log_path)
                     #DEFAULT VALUES: num_frames=4, batch_size=32, lr=1e-5
-                    agent = D3QN(env.observation_space, env.action_space, name=agent_name, is_training=True, num_frames=NUM_FRAMES)
+                    agent = D3QN(env.observation_space, env.action_space, name=agent_name, is_training=True, num_frames=NUM_FRAMES, control_gen=controllable_generators)
                     agent.train(env, train_iter, path_save, logdir=log_path)
                     agent.export_summary(log_path=os.path.join(log_path, agent_name))
                 else:
