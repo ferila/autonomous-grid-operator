@@ -6,7 +6,7 @@ from MyRunner import MyRunner
 from MyReviewer import Reviewer
 from Heuristic import TopologyPTDF
 from grid2op.Reward import L2RPNReward, RedispReward
-from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward, Di2Reward, Di3Reward, CDi3Reward, C2Di3Reward
+from MyRewards.XDiReward import LidiReward, OvdiReward, DiReward, FoolReward, Di2Reward, Di3Reward, CDi3Reward, C2Di3Reward, Di22Reward, C3Di3Reward, Di23Reward, Di24Reward
 from grid2op.Agent import DoNothingAgent
 from MyAgents.DQNb import D3QN
 from MyAgents.ExpertSystem import ExpertSystem
@@ -27,15 +27,15 @@ if __name__ == "__main__":
     #reward_to_use = DiReward #GameplayReward in "l2rpn_wcci_2020"
     train_iter = 35000
     NUM_FRAMES = 3
-    controllable_generators = [0,1,5] # must be sorted increasingly
+    controllable_generators = [5] # must be sorted increasingly
     custom_params = Parameters()
-    custom_params.ENV_DC = True
+    custom_params.ENV_DC = False
     for env_case_name in ["l2rpn_case14_sandbox"]: # "rte_case14_redisp" # rte_case14_redisp, l2rpn_case14_sandbox, wcci_test
         environ = {"l2rpn_case14_sandbox": "sandbox", "rte_case14_redisp": "redisp"} # should use regex
         # notes for each agent case and its version
         vnotes = {
             'c2di3': "In this version:\n\
-                Reward: continuous values, no action cost, no is_illegal, min_rew (-20), ovf threshold 0.9, safety_redisp 0.95, overflow (-20), target_dispatch distance (-10).\n\
+                Reward: continuous values, no action cost, no is_illegal, min_rew (-20), ovf threshold 0.5, safety_redisp 0.95, overflow (-20), target_dispatch distance (-10).\n\
                 Hyperparams: num_frames 3, 35k it. \n\
                 Actions: RedispatchActionFactory. control_gen=[5].\n\
                 Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)",
@@ -44,15 +44,26 @@ if __name__ == "__main__":
                 Hyperparams: num_frames 3, 35k it. \n\
                 Actions: RedispatchActionFactory. control_gen=[5].\n\
                 Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)",
-            'DC_ovf0.8': "In this version:\n\
+            'DC_pq_ctrl5': "In this version:\n\
                 env: DC mode. \n\
-                Reward: continuous values, no action cost, no is_illegal, min_rew (-10), ovf threshold 0.8, overflow (-20), generation limits (-10).\n\
+                Reward: discrete values, no action cost, no is_illegal, min_rew (-10), ovf threshold 0.5, overflow (-20), generation limits (-10).\n\
                 Hyperparams: num_frames 3, 35k it. \n\
-                Actions: controlling 3 generators. Balanced..\n\
-                Observations: rho, prod_p and time (min,hour,day) (gen norm factor 1.2, flow norm factor 1.1)"
+                Actions: controlling generator 5.\n\
+                Observations: rho, prod_p, prod_q and time (min,hour,day) (p and q normalised with apparent power)",
+            'AC_pqp': "In this version:\n\
+                env: AC mode. \n\
+                Reward: ovf (-30), p (-30), q (-30), pmax(-30), pmax(-30), is_illegal(-10, in total cost). ovf threshold 0.9.\n\
+                Hyperparams: num_frames 3, 35k it. \n\
+                Actions: controlling all generator. Ramps values [(-2.5,2.5), (-5,5), (-5,5)]. ramp step 2.5. \n\
+                Observations: rho, prod_p, pfactor (prod_p, prod_q) and time (min,hour,day) (p and q normalised with apparent power)",
+            'L2RPN': "In this version:\n\
+                env: AC mode. \n\
+                Hyperparams: num_frames 3, 35k it. \n\
+                Actions: controlling all generator. Ramps values [(-2.5,2.5), (-5,5), (-5,5)]. ramp step 2.5. \n\
+                Observations: rho, prod_p, pfactor (prod_p, prod_q) and time (min,hour,day) (p and q normalised with apparent power)"
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version, reward_to_use in [("D3QN", 'DC_ovf0.8', Di2Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
+        for case_name, version, reward_to_use in [("DoNothing", 'AC_pqp', Di24Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
             case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):

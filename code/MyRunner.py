@@ -48,7 +48,6 @@ class MyRunner(Runner):
 
         def _FR_export_dict_ObsActs(path_save, dict_obs, episode):
             def _overflow_redispatch_plot(save_path, dict_obs, episode):
-                alpha = 0.5
                 fontsize = 8
                 resolution = 720
                 fig, (a0, a1) = plt.subplots(2, 1, gridspec_kw={'width_ratios': [1], 'height_ratios': [2,1]})
@@ -69,11 +68,11 @@ class MyRunner(Runner):
                 x = np.arange(plays)
                 normalize = mpl.colors.Normalize(vmin=0, vmax=1.3)
                 for lix in range(rho.shape[1]):
-                    a0.scatter(x, ["l{}".format(lix) for i in range(plays)], c=rho[:, lix], cmap=cm.Reds, norm=normalize, alpha=alpha)
+                    a0.scatter(x, ["l{}".format(lix) for i in range(plays)], c=rho[:, lix], cmap=cm.Reds, norm=normalize, alpha=0.5)
                 
                 colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
                 a1.set_prop_cycle(cycler('color', colors))
-                a1.plot(x, redisp_act[:,disp_available], alpha=alpha)
+                a1.plot(x, redisp_act[:,disp_available], alpha=0.7)
                 a1.legend()
 
                 fig.tight_layout()

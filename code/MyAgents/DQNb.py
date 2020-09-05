@@ -23,7 +23,7 @@ class D3QN(DoubleDuelingDQN):
         self.batch_size = batch_size
         self.lr = lr
 
-        red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0)
+        red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0, step_redispatch=2.5)
         self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
         #red_acts = RedispatchActionFactory(observation_space, controllable_generators=control_gen, maximum_ramp_gap=2)
         #self.redispatch_actions_dict = red_acts.redispatch_actions_dict
@@ -31,7 +31,7 @@ class D3QN(DoubleDuelingDQN):
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
         # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
-        self.observation_size = self.obs_space.n_line + self.obs_space.n_gen + 3
+        self.observation_size = self.obs_space.n_line + 3*self.obs_space.n_gen + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = len(self.redispatch_actions_dict) #self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
 
@@ -66,11 +66,26 @@ class D3QN(DoubleDuelingDQN):
             max_load = max_sorted[-1] + max_sorted[-2] # normalise by the two biggest generators
             load_norm = observation.load_p / max_load
             res.append(load_norm)
-        
+
         if True:
-            # include generation observations
-            gen = abs(observation.prod_p) / (observation.gen_pmax * 1.2) # 1.1 (bef 1.1) because prod_p seems to go beyond the maximum
+            # include raw prod_p
+            min_prod = - observation.gen_pmax * 0.01
+            max_prod = observation.gen_pmax * 1.2
+            prod_p = (observation.prod_p - min_prod) / (max_prod - min_prod)
+            res.append(prod_p)
+
+        if True:
+            s_gen = np.sqrt(observation.prod_p**2 + observation.prod_q**2)
+            # include active power observations
+            p_max = 1 #observation.gen_pmax*1.2 # 1.1 (bef 1.1) because prod_p seems to go beyond the maximum
+            p_min = -1
+            gen = (observation.prod_p/s_gen - p_min) / (p_max - p_min) 
             res.append(gen)
+            # include reactive power observations
+            q_max = 1
+            q_min = -1
+            reac = (observation.prod_q/s_gen - q_min) / (q_max - q_min)
+            res.append(reac)
         
         if False:
             # include actual dispatch

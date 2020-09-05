@@ -121,8 +121,12 @@ class RedispatchSpecificActions(object):
         return redisp_list
 
     def _create_generator_list(self, gen_ix):
-        md = -self.obs_space.gen_max_ramp_down[gen_ix]
-        mu = self.obs_space.gen_max_ramp_up[gen_ix]
+        if gen_ix == 0:
+            md = -2.5 #-self.obs_space.gen_max_ramp_down[gen_ix]
+            mu = 2.5 #self.obs_space.gen_max_ramp_up[gen_ix]
+        else:
+            md = -5 #-self.obs_space.gen_max_ramp_down[gen_ix]
+            mu = 5 #self.obs_space.gen_max_ramp_up[gen_ix]
         ans = [0]
         down_val = -self.step_redispatch
         while down_val > md:

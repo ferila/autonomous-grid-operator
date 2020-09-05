@@ -10,13 +10,14 @@ if __name__ == "__main__":
     #ag_paths = [agent2] # agent1, agent3
     #ag_paths = ["yZero_sandbox_D3QN", "yRZero_sandbox_D3QN", "yTZero_sandbox_D3QN"]
 
-    analysis_folder_name = "aaaa" # CHANGE ITTTTTTTT
-    ag_paths = ["_AGC_sandbox_D3QN_Di2Reward_(test)"]
-    short_names = ["D3QN (Di2)"] # "DoNothing", "ExpertSystem"
+    analysis_folder_name = "good_Di24-DoNg" # CHANGE ITTTTTTTT
+    ag_paths = ["_AGC_sandbox_D3QN_Di24Reward_(AC_pqp)", "_AGC_sandbox_DoNothing_Di24Reward_(AC_pqp)"]
+    short_names = ["D3QN (Di24)", "DoNothing"] # "DoNothing", "ExpertSystem"
     notes = [
-        "test"
+        "The biggest change is to not consider violated values of uncontrollable generators",
+        "donothing"
         ]
-    selected_episodes = ["0002", "0003", "0007", "0017", "0018"]
+    selected_episodes = ["0002", "0003", "0007", "0011", "0012", "0017", "0018"]
 
 
     run_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'

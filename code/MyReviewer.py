@@ -105,29 +105,36 @@ class Reviewer(object):
         for ix, c in enumerate(cases):
             this_episode = EpisodeData.from_disk(c, episode_studied)
 
-            # Common graphs
-            ## Rewards and disconnected lines
-            self._add_plot_rewards_and_disconnected_lines(this_episode, axs, case_ix=ix)
-            ## Generation of dispatchable generators and net load
-            self._add_plot_generations_and_load(this_episode, axs2, subplot_ix=ix)
+            try:
+                # Common graphs
+                ## Rewards and disconnected lines
+                self._add_plot_rewards_and_disconnected_lines(this_episode, axs, case_ix=ix)
+                ## Generation of dispatchable generators and net load
+                self._add_plot_generations_and_load(this_episode, axs2, subplot_ix=ix)
 
-            if self.self_analysis:
-                image_folder = os.path.join(self.analysis_path, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
-                if not os.path.exists(image_folder):
-                    os.mkdir(image_folder)
-                # Case specific graphs
-                ## Last frames grid images and animated gif
-                self._save_grid_images(this_episode, last_frames=last_frames, folder=image_folder)
-                ## Last grames values TODO: colour heatmap
-                self._save_heatmap_images(this_episode, last_frames=last_frames, folder=image_folder)
-                ## Actual dispatch, target dispatch, redispatch actions
-                self._add_plot_dispatch_and_redispatch(this_episode, case_ix=ix, folder=image_folder)
-                ## Total demand and generation, generation by unit
-                self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
-                ## Zone balance
-                self._add_specific_topology_lines_plot(this_episode, case_ix=ix, folder=image_folder)
-                ## Overflow and actual_dispatch
-                self._add_overflow_dispatch_plot(this_episode, case_ix=ix, folder=image_folder)
+                if self.self_analysis:
+                    image_folder = os.path.join(self.analysis_path, "{}_{}_images".format(self.agent_paths[ix], episode_studied))
+                    if not os.path.exists(image_folder):
+                        os.mkdir(image_folder)
+                    # Case specific graphs
+                    ## Last frames grid images and animated gif
+                    self._save_grid_images(this_episode, last_frames=last_frames, folder=image_folder)
+                    ## Last grames values TODO: colour heatmap
+                    self._save_heatmap_images(this_episode, last_frames=last_frames, folder=image_folder)
+                    ## Actual dispatch, target dispatch, redispatch actions
+                    self._add_plot_dispatch_and_redispatch(this_episode, case_ix=ix, folder=image_folder)
+                    ## Total demand and generation, generation by unit
+                    self._add_plot_all_generation_by_case(this_episode, case_ix=ix, folder=image_folder)
+                    ## Zone balance
+                    self._add_specific_topology_lines_plot(this_episode, case_ix=ix, folder=image_folder)
+                    ## Overflow and actual_dispatch
+                    self._add_overflow_dispatch_plot(this_episode, case_ix=ix, folder=image_folder)
+                    ## Reactive power analysis
+                    #self._add_power_analysis_plot(this_episode, case_ix=ix, folder=image_folder)
+                    ## Voltage analysis
+                    #self._add_voltage_analysis_plot(this_episode, case_ix=ix, folder=image_folder)
+            except:
+                Exception('Problem exporting a graph in case {}'.format(c))
 
         # Save common graphs
         fig.tight_layout()
@@ -188,10 +195,45 @@ class Reviewer(object):
         ax[subplot_ix,0].legend(disp)
 
     
+    def _add_power_analysis_plot(self, this_episode, case_ix=None, folder=None):
+        """
+        fig 1:
+            - all generators: power p and q
+        fig 2:
+            - all loads: power p and q
+        fig 3:
+            - difference NET s_gen and s_load
+            - difference NET q_gen and q_load
+            - difference NET p_gen and p_load
+        """
+        obs = copy.deepcopy(this_episode.observations)
+        acts = copy.deepcopy(this_episode.observations)
+        plays = this_episode.meta['nb_timestep_played']
+
+        p_load = self._get_all_values(obs, 'load_p')
+        q_load = self._get_all_values(obs, 'load_q')
+        p_gen = self._get_all_values(obs, 'prod_p')
+        q_gen = self._get_all_values(obs, 'prod_q')
+
+        s_gen = np.sqrt(p_gen**2 + q_gen**2)
+        s_load = np.sqrt(p_load**2 + q_load**2)
+
+
+    def _add_voltage_analysis_plot(self, this_episode, case_ix=None, folder=None):
+        """
+        fig 1:
+            - all generators voltage
+        """
+        
+        obs = copy.deepcopy(this_episode.observations)
+        v_or = self._get_all_values(obs, '')
+        
+        pass
+
     def _add_overflow_dispatch_plot(self, this_episode, case_ix=None, folder=None):
         fig, (a0, a1) = plt.subplots(2, 1, gridspec_kw={'width_ratios': [1], 'height_ratios': [2,1]})
         
-        a0.set_title("Overflows - {}".format(self.short_names[case_ix]))
+        a0.set_title("Flows - {}".format(self.short_names[case_ix]))
         a0.set_ylabel("Lines", fontsize=self.fontsize)
 
         a1.set_title("Redispatch - {}".format(self.short_names[case_ix]))
@@ -461,3 +503,18 @@ class Reviewer(object):
         loadB = np.sum(bus_load[:,bus_listB], axis=1)
 
         return genA-loadA, genB-loadB
+
+    @staticmethod
+    def __gen_by_sub(observation):
+        """
+        Return an array with the total generation of each bus
+        """
+        total_gen = np.zeros(observation.n_sub)
+        for i, g in enumerate(observation.prod_p):
+            sub = observation.gen_to_subid[i]
+            total_gen[sub] += g
+        for i, l in enumerate(observation.load_p):
+            sub = observation.load_to_subid[i]
+            total_gen[sub] -= l
+
+        return total_gen
