@@ -8,9 +8,9 @@ class ExpertSystem(BaseAgent):
     def __init__(self, observation_space, action_space, tph_ptdf):
         super().__init__(action_space)
         self.tph_ptdf = tph_ptdf
-        self.overflow_threshold = 0.95
+        self.overflow_threshold = 0.3
         self.obs_space = observation_space
-        red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0)
+        red_acts = RedispatchSpecificActions(observation_space, action_space, max_setpoint_change=0, step_redispatch=2.5)
         self.redispatch_actions_dict = red_acts.REDISPATCH_ACTIONS_DICT
     
     def act(self, obs, reward, done):

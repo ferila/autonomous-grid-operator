@@ -189,6 +189,56 @@ class Di3Reward(BaseReward):
 
             return ovf_cost + over_prod_cost + under_prod_cost + over_redisp_cost + under_redisp_cost #+ action_cost
 
+class CDi24Reward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0.55) # 0.9 #default 0.95
+        self.reward_min = dt_float(-60) #dt_float(-20.0*env.n_line - 10*env.n_gen - 5.0)
+        self.reward_max = dt_float(0.0)
+        self.pf_threshold = dt_float(0.75)
+        self.pmaxmin_threshold = dt_float(0.9) #0.95
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        #if has_error or is_illegal or is_ambiguous:
+        #    return dt_float(-10)
+        #else:
+        if is_illegal:
+            leg_cost = -10
+        else:
+            leg_cost = 0
+
+        # overflow lower than is_illegal
+        #ampere_flows = np.abs(env.backend.get_line_flow(), dtype=dt_float)
+        #thermal_limits = np.abs(env.get_thermal_limit(), dtype=dt_float)
+        #relative_flow = np.divide(ampere_flows, thermal_limits, dtype=dt_float)
+        rho = np.abs(env.backend.get_relative_flow())
+        over_flow = np.maximum(rho - self.overflow_threshold, 0)
+        ovf_cost = dt_float(-70*np.sum(over_flow**2))
+
+        # active and reactive punishment
+        prod_p, prod_q, _ = env.backend.generators_info()
+        prod_p = prod_p[[True,True,False,False,False,True]]
+        prod_q = prod_q[[True,True,False,False,False,True]]
+        s_gen = np.sqrt(prod_p**2 + prod_q**2)
+        pfactor = np.maximum(np.abs(prod_p / s_gen) - self.pf_threshold, 0)
+        p_cost = 0#dt_float(-30*np.sum(pfactor**2))
+        qfactor = np.maximum(np.abs(prod_q / s_gen) - self.pf_threshold, 0)
+        q_cost = 0#dt_float(-30*np.sum(qfactor**2))
+
+        # pmax limits
+        pmax = np.abs(env.gen_pmax)[[True,True,False,False,False,True]]
+        pmin = np.abs(env.gen_pmin)[[True,True,False,False,False,True]]
+        over = np.maximum(prod_p/pmax - self.pmaxmin_threshold, 0)
+        over_redisp_cost = dt_float(-30*np.sum(over**2))
+        under = np.maximum((pmin - prod_p)/pmax + 1 - self.pmaxmin_threshold, 0)        
+        under_redisp_cost = dt_float(-30*np.sum(under**2))
+
+        return leg_cost + ovf_cost + p_cost + q_cost + over_redisp_cost + under_redisp_cost
+
 class Di24Reward(BaseReward):
 
     def __init__(self):

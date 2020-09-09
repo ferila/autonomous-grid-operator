@@ -256,7 +256,7 @@ class Reviewer(object):
         colors = [cm.rainbow(x) for x in np.linspace(0, 1, len(disp))]
         a1.set_prop_cycle(cycler('color', colors))
         a1.plot(x, redisp_act[:,disp_available], alpha=self.alpha)
-        a1.legend()
+        a1.legend(disp)
 
         fig.tight_layout()
         fig.savefig(os.path.join(folder, "overflow_dispatch"), dpi=self.resolution)

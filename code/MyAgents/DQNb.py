@@ -31,7 +31,7 @@ class D3QN(DoubleDuelingDQN):
         # v1: observation size = powerflows + generators (prod_p) + (minute, hour, day and month)
         # v2: observation size = powerflows + loads (load_p) + generators (prod_p) + (minute, hour, day and month)
         # v3: observation size = powerflows + generators (prod_p) + generators (actual_d) + (minute, hour, day and month)
-        self.observation_size = self.obs_space.n_line + 3*self.obs_space.n_gen + 3
+        self.observation_size = self.obs_space.n_line + self.obs_space.n_load + 3*self.obs_space.n_gen + 3
         # action size = decrease (max_ramp_down), stay or increase (max_ramp_up) dispatch for each redispatchable generator
         self.action_size = len(self.redispatch_actions_dict) #self.ACTIONS_PER_GEN ** sum(self.obs_space.gen_redispatchable)
 
@@ -60,7 +60,7 @@ class D3QN(DoubleDuelingDQN):
             pflow = (np.sign(observation.p_or) * abs(observation.rho) - min_val) / (max_val - min_val) 
             res.append(pflow)
         
-        if False:
+        if True:
             # include load_p observations
             max_sorted = np.sort(observation.gen_pmax)
             max_load = max_sorted[-1] + max_sorted[-2] # normalise by the two biggest generators
@@ -69,7 +69,7 @@ class D3QN(DoubleDuelingDQN):
 
         if True:
             # include raw prod_p
-            min_prod = - observation.gen_pmax * 0.01
+            min_prod = - observation.gen_pmax * 0.05
             max_prod = observation.gen_pmax * 1.2
             prod_p = (observation.prod_p - min_prod) / (max_prod - min_prod)
             res.append(prod_p)

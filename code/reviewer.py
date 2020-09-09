@@ -10,12 +10,12 @@ if __name__ == "__main__":
     #ag_paths = [agent2] # agent1, agent3
     #ag_paths = ["yZero_sandbox_D3QN", "yRZero_sandbox_D3QN", "yTZero_sandbox_D3QN"]
 
-    analysis_folder_name = "good_Di24-DoNg" # CHANGE ITTTTTTTT
-    ag_paths = ["_AGC_sandbox_D3QN_Di24Reward_(AC_pqp)", "_AGC_sandbox_DoNothing_Di24Reward_(AC_pqp)"]
-    short_names = ["D3QN (Di24)", "DoNothing"] # "DoNothing", "ExpertSystem"
+    analysis_folder_name = "compar_loadObservation_with_Di24" # CHANGE ITTTTTTTT
+    ag_paths = ["_AGC_sandbox_D3QN_Di24Reward_(AC_pqp)_WIN", "_AGC_sandbox_D3QN_Di24Reward_(AC_pqp_gc30_l)"]
+    short_names = ["D3QN (no load)", "D3QN (with load)"] # "DoNothing", "ExpertSystem"
     notes = [
         "The biggest change is to not consider violated values of uncontrollable generators",
-        "donothing"
+        "It includes load in the observation space"
         ]
     selected_episodes = ["0002", "0003", "0007", "0011", "0012", "0017", "0018"]
 
