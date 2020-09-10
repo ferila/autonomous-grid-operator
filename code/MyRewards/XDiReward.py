@@ -189,6 +189,50 @@ class Di3Reward(BaseReward):
 
             return ovf_cost + over_prod_cost + under_prod_cost + over_redisp_cost + under_redisp_cost #+ action_cost
 
+class CDi242Reward(BaseReward):
+
+    def __init__(self):
+        BaseReward.__init__(self)
+    
+    def initialize(self, env):
+        # overflow threshold to act
+        self.overflow_threshold = dt_float(0) # 0.9 #default 0.95
+        self.reward_min = dt_float(-100) #dt_float(-20.0*env.n_line - 10*env.n_gen - 5.0)
+        self.reward_max = dt_float(0.0)
+        #self.pf_threshold = dt_float(0.75)
+        #self.pmaxmin_threshold = dt_float(0.9) #0.95
+
+    def __call__(self, action, env, has_error, is_done, is_illegal, is_ambiguous):
+        #if has_error or is_illegal or is_ambiguous:
+        #    return dt_float(-10)
+        #else:
+        if is_illegal:
+            leg_cost = -10
+        else:
+            leg_cost = 0
+
+        # overflow lower than is_illegal
+        rho = np.abs(env.backend.get_relative_flow())
+        over_flow = np.maximum(rho - self.overflow_threshold, 0)
+        #val = np.sum(over_flow**2)/env.n_line
+        ovf_cost = dt_float(-40*(50**max(over_flow)/50))
+
+        # active and reactive punishment
+        ac_disp = np.abs(env.get_obs().actual_dispatch / env.gen_pmax)
+        disp_cost = dt_float(-30*np.sum(ac_disp**2)/np.sum(env.gen_redispatchable))
+
+        # pmax limits
+        # prod_p, prod_q, _ = env.backend.generators_info()
+        # prod_p = prod_p[[True,True,False,False,False,True]]
+        # pmax = np.abs(env.gen_pmax)[[True,True,False,False,False,True]]
+        # pmin = np.abs(env.gen_pmin)[[True,True,False,False,False,True]]
+        # over = np.maximum(prod_p/pmax - self.pmaxmin_threshold, 0)
+        # over_redisp_cost = dt_float(-30*np.sum(over**2))
+        # under = np.maximum((pmin - prod_p)/pmax + 1 - self.pmaxmin_threshold, 0)        
+        # under_redisp_cost = dt_float(-30*np.sum(under**2))
+
+        return leg_cost + ovf_cost + disp_cost #+ over_redisp_cost + under_redisp_cost
+
 class CDi24Reward(BaseReward):
 
     def __init__(self):

@@ -6,7 +6,7 @@ from MyRunner import MyRunner
 from MyReviewer import Reviewer
 from Heuristic import TopologyPTDF
 from grid2op.Reward import L2RPNReward, RedispReward
-from MyRewards.XDiReward import Di24Reward, CDi24Reward # LidiReward, OvdiReward, DiReward, FoolReward, Di2Reward, Di3Reward, CDi3Reward, C2Di3Reward, Di22Reward, C3Di3Reward, Di23Reward, 
+from MyRewards.XDiReward import Di24Reward, CDi24Reward, CDi242Reward # LidiReward, OvdiReward, DiReward, FoolReward, Di2Reward, Di3Reward, CDi3Reward, C2Di3Reward, Di22Reward, C3Di3Reward, Di23Reward, 
 from grid2op.Agent import DoNothingAgent
 from MyAgents.DQNb import D3QN
 from MyAgents.ExpertSystem import ExpertSystem
@@ -25,7 +25,7 @@ from grid2op.Parameters import Parameters
 
 if __name__ == "__main__":
     #reward_to_use = DiReward #GameplayReward in "l2rpn_wcci_2020"
-    train_iter = 45000
+    train_iter = 35000
     NUM_FRAMES = 3
     controllable_generators = [5] # must be sorted increasingly
     custom_params = Parameters()
@@ -50,10 +50,10 @@ if __name__ == "__main__":
                 Hyperparams: num_frames 3, 35k it. \n\
                 Actions: controlling generator 5.\n\
                 Observations: rho, prod_p, prod_q and time (min,hour,day) (p and q normalised with apparent power)",
-            'AC_pqp_ovf.55_70': "In this version:\n\
+            'AC_acdi_ovfMax_to50': "In this version:\n\
                 env: AC mode. \n\
-                Reward: ovf (-70), pmax(-30), pmin(-30), is_illegal(-10, in total cost). ovf threshold 0.55. Rew min -60\n\
-                Hyperparams: num_frames 3, 45k it. \n\
+                Reward: ovf (-40), actual_disp (-30), is_illegal(-10, in total cost). ovf threshold 0. Rew min -40\n\
+                Hyperparams: num_frames 3, 35k it. \n\
                 Actions: controlling all generator. Ramps values [(-2.5,2.5), (-5,5), (-5,5)]. ramp step 2.5. \n\
                 Observations: rho, load_p, prod_p, pfactor (prod_p, prod_q) and time (min,hour,day) (p and q normalised with apparent power)",
             'L2RPN': "In this version:\n\
@@ -64,7 +64,7 @@ if __name__ == "__main__":
             'AC_ExpSys_ovf.3': "overflow threshold 0.3"
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version, reward_to_use in [("D3QN", 'AC_pqp_ovf.55_70', CDi24Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
+        for case_name, version, reward_to_use in [("D3QN", 'AC_acdi_ovfMax_to50', CDi242Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
             case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):
