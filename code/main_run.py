@@ -50,9 +50,9 @@ if __name__ == "__main__":
                 Hyperparams: num_frames 3, 35k it. \n\
                 Actions: controlling generator 5.\n\
                 Observations: rho, prod_p, prod_q and time (min,hour,day) (p and q normalised with apparent power)",
-            'AC_pow5050': "In this version:\n\
+            'final_single_seed1': "In this version:\n\
                 env: AC mode. \n\
-                Reward: ovf (-50), actual_disp (-40), no diff dispatch (-20). ovf threshold 0. Rew min -40 \n\
+                Reward: ovf (-40), actual_disp (-30), no diff dispatch (-0), is illegal (-10). ovf threshold 0. Rew min -100 \n\
                 Hyperparams: num_frames 3, 35k it. \n\
                 Actions: controlling all generator. Ramps values [(-2.5,2.5), (-5,5), (-5,5)]. ramp step 2.5. \n\
                 Observations: rho, load_p, prod_p, pfactor (prod_p, prod_q) and time (min,hour,day) (p and q normalised with apparent power)",
@@ -64,7 +64,7 @@ if __name__ == "__main__":
             'AC_ExpSys_ovf.3': "overflow threshold 0.3"
         }
         # version should change when case is repeated (same env-agent-reward)
-        for case_name, version, reward_to_use in [("D3QN", 'AC_pow5050', CDi242Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
+        for case_name, version, reward_to_use in [("D3QN", 'final_single_seed1', CDi242Reward)]: #, ("D3QN", 'c2di3', C2Di3Reward)]: #"DoNothing" "ExpertSystem" "D3QN"
             case = "_AGC_{}_{}_{}_({})".format(environ[env_case_name], case_name, reward_to_use.__name__, version)
             path_save = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases\\{}'.format(case)
             if not os.path.exists(path_save):

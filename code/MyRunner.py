@@ -17,7 +17,7 @@ class MyRunner(Runner):
     
 
     @staticmethod
-    def _run_one_episode(env, agent, logger, indx, path_save=None, pbar=False, seed=None, max_iter=None):
+    def _run_one_episode(env, agent, logger, indx, path_save=None, pbar=False, max_iter=None, seed=None):
         def _FR_append_observations(dict_obs, act, obs, rew):
             if dict_obs:
                 dict_obs['prod_p'].append(obs.prod_p)
