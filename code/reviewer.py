@@ -10,13 +10,14 @@ if __name__ == "__main__":
     #ag_paths = [agent2] # agent1, agent3
     #ag_paths = ["yZero_sandbox_D3QN", "yRZero_sandbox_D3QN", "yTZero_sandbox_D3QN"]
 
-    analysis_folder_name = "just_ExpertSystem" # CHANGE ITTTTTTTT
-    ag_paths = ["_AGC_sandbox_ExpertSystem_Di24Reward_(AC_ExpSys_ovf.95)"]
-    short_names = ["ExpertSystem"] # "DoNothing", "ExpertSystem"
+    analysis_folder_name = "D3QNs_comparison_onlyEp20" # CHANGE ITTTTTTTT
+    ag_paths = ["_AGC_sandbox_D3QN_CDi242Reward_(AC_acdi_ovfMax_to50)_BEST", 
+    "_AGC_sandbox_D3QN_CDi242Reward_(AC_pow5050)_BEST2_DUSTUF"]
+    short_names = ["D3QN", "D3QN v2"] # "DoNothing", "ExpertSystem"
     notes = [
         "Just reviewing"
         ]
-    selected_episodes = ["0002", "0003", "0007", "0011", "0012", "0017", "0018"]
+    selected_episodes = ["0019"]
 
 
     run_path = 'D:\\ESDA_MSc\\Dissertation\\code_stuff\\cases'
